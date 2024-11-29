@@ -14,24 +14,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from data_loaders.docling_loader import DoclingHTMLLoader
 
 class QueryHandler:
-    def __init__(self, llm_model_name: str, embeddings_model_name: str, vector_db_path: str):
+    def __init__(self, vector_db: VectorStore):
         """
         Initializes the Query Handler.
 
         Parameters:
-            llm_model_name (str): The name of the LLM model to be used.
-            embeddings_model_name (str): The name of the Embeddings model to be used.
             vector_db_path (str): Path to load the vector database.
         """
-        embeddings = OpenAIEmbeddings(
-            model=embeddings_model_name
-        )
-
-        self.vector_db = Chroma(
-            persist_directory=vector_db_path,
-            embedding_function=embeddings,
-            collection_metadata={"hnsw:space": "cosine"}
-        )
+        self.vector_db = vector_db
         
         # Check if the database is initialized and get the document count
         print(f"ChromaDB initialized successfully. Document count: {self.vector_db._collection.count()}")

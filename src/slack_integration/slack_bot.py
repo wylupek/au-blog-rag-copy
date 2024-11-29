@@ -22,62 +22,85 @@ class SlackBot:
     def _register_handlers(self):
         @self.app.event("message")
         def handle_message(event, say, ack, client):
-            # Acknowledge the event
+            """Main entry point for handling Slack messages."""
             ack()
-
-            # Filter for private channels or direct messages
-            if event.get('channel_type') in ['im', 'group']:
-                text = event.get('text', '').strip()
-
-                # Ignore bot's own messages
-                if event.get('bot_id'):
+            try:
+                if not self._is_valid_event(event):
                     return
 
-                try:
-                    # Extract the channel ID
-                    channel_id = event['channel']
+                channel_id = event['channel']
+                text = event.get('text', '').strip()
 
-                    # Send a "Thinking..." placeholder message
-                    thinking_message = client.chat_postMessage(
-                        channel=channel_id,
-                        text="_Thinking..._"
-                    )
+                # Send typing indicator
+                user_id = event.get('user')
+                self._send_typing_placeholder(client, channel_id, user_id)
 
-                    # Process the question and generate the response
-                    response = self._process_question(text)
+                # Process the user's question and generate a response
+                response = self._generate_response(text)
 
-                    # Update the "Thinking..." message with the actual response
-                    if isinstance(response, dict) and "blocks" in response:
-                        client.chat_update(
-                            channel=channel_id,
-                            ts=thinking_message['ts'],  # Timestamp of the placeholder message
-                            blocks=response["blocks"]
-                        )
-                    else:
-                        client.chat_update(
-                            channel=channel_id,
-                            ts=thinking_message['ts'],
-                            text=response
-                        )
-                except Exception as e:
-                    logger.error(f"Error processing message: {e}")
-                    say("I encountered an error processing your request.")
+                # Send the response back to the user
+                self._send_response(client, channel_id, response)
 
-    def _process_question(self, question):
-        """Process question through RAG system and format response."""
-        results = self.rag_system.get_answer(question)
+            except ValueError as ve:
+                logger.error(f"Validation error: {ve}")
+                say(str(ve))
+            except Exception as e:
+                logger.error(f"Unexpected error while processing message: {e}")
+                say("An unexpected error occurred. Please try again later.")
+
+    def _is_valid_event(self, event):
+        """Validate the Slack event."""
+        if event.get('channel_type') not in ['im', 'group']:
+            return False
+        if event.get('bot_id'):  # Ignore bot messages
+            return False
+        if not event.get('text', '').strip():
+            raise ValueError("Message text is empty.")
+        return True
+
+    def _send_typing_placeholder(self, client, channel_id, user):
+        """Send a placeholder 'Thinking...' message."""
+        try:
+            return client.chat_postEphemeral(
+                channel=channel_id,
+                text="_Thinking..._",
+                user=user
+            )
+        except Exception as e:
+            logger.error(f"Failed to send 'Thinking...' placeholder: {e}")
+            raise ValueError("Unable to send 'Thinking...' placeholder.")
+
+    def _generate_response(self, text):
+        """Process the user's question and generate a response."""
+        results = self.rag_system.get_answer(text)
 
         if not results:
             return "No relevant information found for your query."
 
-        # Build Slack message using Block Kit
-        blocks = self._build_slack_message_blocks(results)
-        return {"blocks": blocks}
+        return {"blocks": self._build_slack_message_blocks(results)}
+
+    def _send_response(self, client, channel_id, response):
+        """Send the response back to the channel with link unfurling disabled."""
+        try:
+            if isinstance(response, dict) and "blocks" in response:
+                client.chat_postMessage(
+                    channel=channel_id,
+                    blocks=response["blocks"],
+                    unfurl_links=False  # Disable link unfurling
+                )
+            else:
+                client.chat_postMessage(
+                    channel=channel_id,
+                    text=response,
+                    unfurl_links=False  # Disable link unfurling
+                )
+        except Exception as e:
+            logger.error(f"Failed to send response message: {e}")
+            raise ValueError("Unable to send the Slack response.")
+
 
     def _build_slack_message_blocks(self, results):
         """Build Slack Block Kit message blocks from results."""
-        print("DEBUG: Results Type:", type(results))
-        print("DEBUG: Results Content:", results)
         blocks = [
             {
                 "type": "section",
@@ -90,15 +113,12 @@ class SlackBot:
         ]
 
         for result in results[:20]:
-            # Extract the URL
             url = result.get('url', 'URL not available')
-
-            # Safely handle 'analysis'
             analysis = result.get('analysis', 'Analysis not available')
+
             if isinstance(analysis, str) and "Analysis:" in analysis:
                 analysis = analysis.replace("Analysis:", "").strip()
 
-            # Add to Slack blocks
             blocks.append(
                 {
                     "type": "section",
@@ -113,11 +133,10 @@ class SlackBot:
         return blocks
 
     def start(self):
-        """Start the bot"""
+        """Start the bot."""
         try:
             logger.info("Starting Private Channel RAG Bot...")
             self.socket_handler.start()
         except Exception as e:
             logger.error(f"Bot startup error: {e}")
             raise
-
