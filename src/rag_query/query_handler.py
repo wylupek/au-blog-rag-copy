@@ -11,20 +11,14 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.load import dumps, loads
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from data_loaders.docling_loader import DoclingHTMLLoader
+from src.data_loaders.docling_loader import DoclingHTMLLoader
+from langchain_pinecone import PineconeVectorStore
+
 
 class QueryHandler:
-    def __init__(self, vector_db: VectorStore):
-        """
-        Initializes the Query Handler.
-
-        Parameters:
-            vector_db_path (str): Path to load the vector database.
-        """
-        self.vector_db = vector_db
-        
-        # Check if the database is initialized and get the document count
-        print(f"ChromaDB initialized successfully. Document count: {self.vector_db._collection.count()}")
+    def __init__(self, vector_store: PineconeVectorStore):
+        self.vector_store = vector_store
+        print(f"Pinecone initialized successfully.")
         
     def get_answer(self, question):
         # return documents based on query
@@ -59,13 +53,11 @@ class QueryHandler:
             unique_docs = list(set(flattened_docs))
             return [loads(doc) for doc in unique_docs]
 
-        # Retrieve documents
-        retriever = self.vector_db.as_retriever(
+        retriever = self.vector_store.as_retriever(
             search_type="similarity_score_threshold",
             search_kwargs={"score_threshold": 0.2}
-            # search_type="similarity",
-            # search_kwargs={"k": 4}
         )
+
         retrieval_chain = generate_queries | retriever.map() | get_unique_union
         docs = retrieval_chain.invoke({"question": user_query})
 
@@ -81,7 +73,6 @@ class QueryHandler:
 
         # Return top-k matches
         return docs
-
 
     def analyze_summaries(self, urls: [str], question: str) -> List[dict]:
         """
