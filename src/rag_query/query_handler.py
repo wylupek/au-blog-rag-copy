@@ -1,10 +1,4 @@
-from collections import Counter
-from typing import List, Tuple
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.document_loaders import WebBaseLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores.base import VectorStore
+from typing import List
 from langchain.schema import Document
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
@@ -13,6 +7,7 @@ from langchain.load import dumps, loads
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.data_loaders.docling_loader import DoclingHTMLLoader
 from langchain_pinecone import PineconeVectorStore
+from src.data_loaders.sitemap_entry import SitemapEntry
 
 
 class QueryHandler:
@@ -103,13 +98,13 @@ class QueryHandler:
 
         llm = ChatOpenAI(temperature=0.4, model_name="gpt-4o-mini")
 
-        def process_url(url):
+        def process_url(sitemap_entry: SitemapEntry):
             """
             Process a single URL: Load the document, send it to the LLM, and return the analysis.
             """
             try:
                 # Load the document using the custom loader
-                loader = DoclingHTMLLoader(file_path=url)
+                loader = DoclingHTMLLoader(sitemap_entry)
                 document = loader.load()
 
                 # Format the prompt with the query and document content
@@ -121,14 +116,14 @@ class QueryHandler:
 
                 # Return the processed result
                 return {
-                    "url": url,
+                    "url": sitemap_entry.url,
                     "analysis": result.content
                 }
             except Exception as e:
                 # Handle and log any errors
                 return {
-                    "url": url,
-                    "analysis": f"Error processing URL {url}: {e}"
+                    "url": sitemap_entry.url,
+                    "analysis": f"Error processing URL {sitemap_entry.url}: {e}"
                 }
 
         # Use ThreadPoolExecutor to parallelize URL processing

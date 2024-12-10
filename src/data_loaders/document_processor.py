@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 import os
@@ -41,14 +41,15 @@ class DocumentProcessor:
         self.vectorstore = vectorstore
 
 
-    def load_documents(self, urls: List[str]) -> None:
+    def load_documents(self, sitemap_entries: list) -> None:
         """
         Load and index documents into the Pinecone vector database.
 
-        :param urls: List of URLs to load and index.
+        :param sitemap_entries: List of URLs to load and index.
         """
+
         # Load documents using your custom loader
-        loader = DoclingHTMLLoader(file_path=urls)
+        loader = DoclingHTMLLoader(sitemap_entry=sitemap_entries)
         documents = loader.load()
 
         # Initialize MarkdownHeaderTextSplitter
@@ -75,13 +76,13 @@ class DocumentProcessor:
         # Split the documents into chunks
         processed_documents = text_splitter.split_documents(documents)
 
-        # for i, doc in enumerate(docs_processed):
+        # for i, doc in enumerate(processed_documents):
         #     print(f"***** {i + 1} *****\n"
         #           f"{doc.metadata}\n"
         #           f"{doc.page_content}\n")
 
         self.vectorstore.add_documents(documents=processed_documents)
-        print(f"Indexed {len(processed_documents)} chunks into the Pinecone vectorstore.")
+        print(f"Loaded {len(processed_documents)} chunks into the Pinecone vectorstore.")
 
 
     def get_all_documents(self, namespace: str = None):
