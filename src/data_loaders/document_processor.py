@@ -40,6 +40,13 @@ class DocumentProcessor:
         vectorstore = PineconeVectorStore(index=pinecone_index, embedding=embeddings)
         self.vectorstore = vectorstore
 
+        index_stats = pinecone_index.describe_index_stats()
+        total_count = 0
+        for key, items in index_stats['namespaces'].items():
+            total_count += items['vector_count']
+        self.total_count = total_count
+        print(f"Total vectors: {total_count}")
+
 
     def load_documents(self, sitemap_entries: list) -> None:
         """
@@ -81,8 +88,13 @@ class DocumentProcessor:
         #           f"{doc.metadata}\n"
         #           f"{doc.page_content}\n")
 
-        self.vectorstore.add_documents(documents=processed_documents)
+        ids = [str(i + self.total_count) for i in range(len(processed_documents))]
+        self.vectorstore.add_documents(documents=processed_documents, ids=ids)
+        self.total_count += len(processed_documents)
+
         print(f"Loaded {len(processed_documents)} chunks into the Pinecone vectorstore.")
+        print(f"Total vector count: {self.total_count}")
+
 
 
     def get_all_documents(self, namespace: str = None):
