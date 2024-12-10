@@ -1,10 +1,4 @@
-from collections import Counter
-from typing import List, Tuple
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.document_loaders import WebBaseLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores.base import VectorStore
+from typing import List
 from langchain.schema import Document
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
@@ -13,6 +7,7 @@ from langchain.load import dumps, loads
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.data_loaders.docling_loader import DoclingHTMLLoader
 from langchain_pinecone import PineconeVectorStore
+from src.data_loaders.sitemap_entry import SitemapEntry
 
 
 class QueryHandler:
@@ -25,10 +20,10 @@ class QueryHandler:
         results = self.search_documents(user_query=question) 
 
         # Get unique URLs sorted by frequency
-        sources = self.get_sorted_urls_by_frequency(results)
+        entries = self.get_sorted_entries_by_frequency(results)
 
         # Generate summary and query answer for each article
-        return self.analyze_summaries(sources, question)
+        return self.analyze_summaries(entries, question)
 
     def search_documents(self, user_query: str) -> List[Document]:
         """Retrieve and return top-k most relevant documents."""
@@ -74,7 +69,7 @@ class QueryHandler:
         # Return top-k matches
         return docs
 
-    def analyze_summaries(self, urls: [str], question: str) -> List[dict]:
+    def analyze_summaries(self, sitemap_entries: [str], question: str) -> List[dict]:
         """
         Uses the LLM to analyze how each document summary can answer the user's query.
         This version parallelizes the API calls for efficiency.
@@ -103,13 +98,13 @@ class QueryHandler:
 
         llm = ChatOpenAI(temperature=0.4, model_name="gpt-4o-mini")
 
-        def process_url(url):
+        def process_url(sitemap_entry: SitemapEntry):
             """
             Process a single URL: Load the document, send it to the LLM, and return the analysis.
             """
             try:
                 # Load the document using the custom loader
-                loader = DoclingHTMLLoader(file_path=url)
+                loader = DoclingHTMLLoader(sitemap_entry)
                 document = loader.load()
 
                 # Format the prompt with the query and document content
@@ -121,20 +116,20 @@ class QueryHandler:
 
                 # Return the processed result
                 return {
-                    "url": url,
+                    "url": sitemap_entry.url,
                     "analysis": result.content
                 }
             except Exception as e:
                 # Handle and log any errors
                 return {
-                    "url": url,
-                    "analysis": f"Error processing URL {url}: {e}"
+                    "url": sitemap_entry.url,
+                    "analysis": f"Error processing URL {sitemap_entry.url}: {e}"
                 }
 
         # Use ThreadPoolExecutor to parallelize URL processing
         analyses = []
         with ThreadPoolExecutor(max_workers=5) as executor:  # Adjust `max_workers` based on your needs
-            future_to_url = {executor.submit(process_url, url): url for url in urls}
+            future_to_url = {executor.submit(process_url, sitemap_entry): sitemap_entry for sitemap_entry in sitemap_entries}
 
             for future in as_completed(future_to_url):
                 try:
@@ -161,7 +156,9 @@ class QueryHandler:
             print(f"\n{result['analysis']}")
             print("-" * 50)
 
-    def get_sorted_urls_by_frequency(self, documents: List[Document]) -> List[str]:
+
+    # TODO I think it doesn't work properly
+    def get_sorted_entries_by_frequency(self, documents: List[Document]) -> List[SitemapEntry]:
         """
         Extracts and sorts a list of unique URLs from document metadata by their frequency.
 
@@ -172,6 +169,7 @@ class QueryHandler:
             list: Sorted list of unique URLs (most frequent first).
         """
         from collections import Counter
+        from datetime import datetime
 
         # Collect all sources
         sources = [doc.metadata.get("source") for doc in documents if "source" in doc.metadata]
@@ -182,4 +180,5 @@ class QueryHandler:
         # Sort by count in descending order and extract only the URLs
         sorted_urls = [url for url, count in source_counts.most_common()]
 
-        return sorted_urls
+        return [SitemapEntry(url=url, lastmod=None) for url in sorted_urls]
+
