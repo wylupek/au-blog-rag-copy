@@ -4,8 +4,8 @@ from slack_integration.slack_bot import SlackBot
 from rag_query.query_handler import QueryHandler
 from data_loaders.sitemap_entry import Sitemap
 from data_loaders.document_processor import DocumentProcessor
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
+
+
 
 def main():
     dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -21,30 +21,13 @@ def main():
     sitemap = Sitemap(sitemap="https://tech.appunite.com/blog/blog-sitemap.xml")
     sitemap_entries = sitemap.load()
 
-    # debug entries
-    # for entry in sitemap_entries:
-    #     print(f"URL: {entry.url}, Last Modified: {entry.lastmod}")
-
-    # Extract only URLs
-    urls = [entry.url for entry in sitemap_entries]
-
-    embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-small"
-    )
-
-    vector_db = Chroma(
-        persist_directory="./vector_db",
-        embedding_function=embeddings,
-        collection_metadata={"hnsw:space": "cosine"}
-    )
-
-    # create vector database
-    document_processor = DocumentProcessor(vector_db=vector_db)
-    document_processor.load_and_index_documents(urls=urls)
+    document_processor = DocumentProcessor('au-blog-rag')
+    document_processor.update_database(sitemap_entries)
 
     # 
     rag_system = QueryHandler(
-        vector_db=vector_db
+        vectorstore=document_processor.vectorstore,
+        pinecone_index=document_processor.pinecone_index
     )
 
     #
