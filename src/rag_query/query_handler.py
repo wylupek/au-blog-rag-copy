@@ -8,67 +8,82 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.data_loaders.docling_loader import DoclingHTMLLoader
 from langchain_pinecone import PineconeVectorStore
 from src.data_loaders.sitemap_entry import SitemapEntry
+from sklearn.metrics.pairwise import cosine_similarity
+from pinecone import Pinecone
+
 
 
 class QueryHandler:
-    def __init__(self, vector_store: PineconeVectorStore):
-        self.vector_store = vector_store
+    def __init__(self, vectorstore: PineconeVectorStore, pinecone_index: Pinecone.Index):
+        self.vectorstore = vectorstore
+        self.pinecone_index = pinecone_index
         print(f"Pinecone initialized successfully.")
-        
+
+
     def get_answer(self, question):
         # return documents based on query
         results = self.search_documents(user_query=question) 
 
         # Get unique URLs sorted by frequency
-        entries = self.get_sorted_entries_by_frequency(results)
+        entries = self.get_entries_by_score(results, question)
 
         # Generate summary and query answer for each article
         return self.analyze_summaries(entries, question)
 
+
     def search_documents(self, user_query: str) -> List[Document]:
         """Retrieve and return top-k most relevant documents."""
         # Generate alternative queries
-        template = ("You are an AI language model assistant. Your task is to generate five different versions of the "
-                    "given user question to retrieve relevant documents from a vector database. By generating "
-                    "multiple perspectives on the user question, your goal is to help the user overcome some of the "
-                    "limitations of the distance-based similarity search. Provide these alternative questions "
-                    "separated by newlines. Original question: {question}")
+        template = """
+        You are an AI language model assistant. Your task is to generate four different versions of the given
+        user question to retrieve relevant documents from a vector database. By generating multiple perspectives
+        on the user question, your goal is to help the user overcome limitations of the distance-based 
+        similarity search. Provide only these alternative questions, each one in a new line without numbering. 
+        Original question: {question}
+        """
+        template = " ".join(line.strip() for line in template.strip().splitlines())
         prompt_perspectives = ChatPromptTemplate.from_template(template)
 
-        generate_queries = (
+        generate_queries_pipeline = (
             prompt_perspectives
             | ChatOpenAI(temperature=0, model_name="gpt-4o-mini")
             | StrOutputParser()
-            | (lambda x: x.split("\n"))
+            | (lambda x: [user_query] + [query.strip() for query in x.split("\n") if query.strip()])
         )
 
-        def get_unique_union(documents: list[list]):
+        # generated_queries = generate_queries_pipeline.invoke({"question": user_query})
+        # print("Generated queries:")
+        # for i, generated_query in enumerate(generated_queries):
+        #     print(f"{i + 1}. {generated_query}")
+
+        def get_unique_documents(docs: list[list]):
             """Unique union of retrieved docs."""
-            flattened_docs = [dumps(doc) for sublist in documents for doc in sublist]
+            flattened_docs = [dumps(doc) for sublist in docs for doc in sublist]
             unique_docs = list(set(flattened_docs))
             return [loads(doc) for doc in unique_docs]
 
-        retriever = self.vector_store.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"score_threshold": 0.2}
+        retriever = self.vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": 10},
         )
 
-        retrieval_chain = generate_queries | retriever.map() | get_unique_union
-        docs = retrieval_chain.invoke({"question": user_query})
+        retrieval_chain = (
+                generate_queries_pipeline
+                | retriever.map()
+                | get_unique_documents
+        )
+        documents = retrieval_chain.invoke({"question": user_query})
 
-        # Debugging
-        print(f"DEBUG: Retrieved {len(docs)} documents")
-        for i, doc in enumerate(docs):
-            print(f"Document {i + 1}:")
-            print(f"  Page Content: {doc.page_content}...")  # Print first 200 characters
-            print(f"  Metadata: {doc.metadata}")
+        print(f"Retrieved {len(documents)} documents:")
+        for i, document in enumerate(documents):
+            print(f"*** Document {i + 1} ***")
+            print(f"Source: {document.metadata['source']}")
+            print(f"Page Content: {document.page_content[:200]}...\n\n")  # Print first 200 characters
 
-        # Sort by relevance score (if available)
-        docs.sort(key=lambda x: x.metadata.get('score', 0), reverse=True)
+        return documents
 
-        # Return top-k matches
-        return docs
 
+    # TODO result should be sorted by score (it isn't because of async), maybe pass score with SitemapEntry?
     def analyze_summaries(self, sitemap_entries: [str], question: str) -> List[dict]:
         """
         Uses the LLM to analyze how each document summary can answer the user's query.
@@ -142,6 +157,7 @@ class QueryHandler:
 
         return analyses
 
+
     def display_results(self, results: List[dict]) -> None:
         """
         Nicely prints the summaries with their corresponding URLs.
@@ -149,7 +165,6 @@ class QueryHandler:
         Parameters:
             results (List[dict]): List of dictionaries containing 'url' and 'analysis'.
         """
-
         print("Analysis Results:\n" + "=" * 50)
         for i, result in enumerate(results, 1):
             print(f"URL: {result['url']}")
@@ -157,28 +172,28 @@ class QueryHandler:
             print("-" * 50)
 
 
-    # TODO I think it doesn't work properly
-    def get_sorted_entries_by_frequency(self, documents: List[Document]) -> List[SitemapEntry]:
+    def get_entries_by_score(self, documents: List[Document], query: str, threshold=0.35) -> List[SitemapEntry]:
         """
-        Extracts and sorts a list of unique URLs from document metadata by their frequency.
-
-        Parameters:
-            documents (list): List of Document objects, each with a metadata dictionary.
-
-        Returns:
-            list: Sorted list of unique URLs (most frequent first).
+        Calculate score and get list of unique sources with best score from given source based on Document object.
+        Sort unique sources by score. Apply threshold on score.
+        :param documents: list of Document objects
+        :param query: user query to calculate score with
+        :param threshold: threshold for score
+        :return: list of unique SitemapEntry objects
         """
-        from collections import Counter
-        from datetime import datetime
+        embedder = self.vectorstore.embeddings
+        query_vector = embedder.embed_query(query)
 
-        # Collect all sources
-        sources = [doc.metadata.get("source") for doc in documents if "source" in doc.metadata]
+        unique_sources = {}
+        for document in documents:
+            doc_vector = embedder.embed_query(document.page_content)
+            score = cosine_similarity([query_vector], [doc_vector])[0][0]
+            if document.metadata["source"] not in unique_sources or score > unique_sources[document.metadata["source"]]:
+                unique_sources[document.metadata["source"]] = score
+        unique_sources = sorted(unique_sources.items(), key=lambda x: x[1], reverse=True)
 
-        # Count occurrences of each source
-        source_counts = Counter(sources)
+        for i, source in enumerate(unique_sources):
+            print(f"{i + 1}. {source[1]}, {source[0]}")
 
-        # Sort by count in descending order and extract only the URLs
-        sorted_urls = [url for url, count in source_counts.most_common()]
-
-        return [SitemapEntry(url=url, lastmod=None) for url in sorted_urls]
+        return [SitemapEntry(url=source[0], lastmod=None) for source in unique_sources if source[1] > threshold]
 
