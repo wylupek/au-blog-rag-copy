@@ -25,15 +25,14 @@ class QueryHandler:
         results = self.search_documents(user_query=question) 
 
         # Get unique URLs sorted by frequency
-        entries = self.get_entries_by_score(results, question)
+        entries = self.get_entries_with_score(results, question)
 
         # Generate summary and query answer for each article
-        return self.analyze_summaries(entries, question)
+        return sorted(self.analyze_summaries(entries, question), key=lambda x: x["score"], reverse=True)
 
 
     def search_documents(self, user_query: str) -> List[Document]:
         """Retrieve and return top-k most relevant documents."""
-        # Generate alternative queries
         template = """
         You are an AI language model assistant. Your task is to generate four different versions of the given
         user question to retrieve relevant documents from a vector database. By generating multiple perspectives
@@ -83,32 +82,28 @@ class QueryHandler:
         return documents
 
 
-    # TODO result should be sorted by score (it isn't because of async), maybe pass score with SitemapEntry?
-    def analyze_summaries(self, sitemap_entries: [str], question: str) -> List[dict]:
+    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str) -> List[dict]:
         """
         Uses the LLM to analyze how each document summary can answer the user's query.
         This version parallelizes the API calls for efficiency.
         """
 
-        # Template for the LLM
         template = """
-        You are an AI language model tasked with generating concise responses to user queries based on provided article content. 
+        You are an AI language model tasked with generating concise and precise responses to user queries based on the provided article content.
 
-        Your goal is to:
-        1. Generate a concise summary of the article.
-        2. Address the user's question strictly based on the article content in simple, non-technical language.
-        3. Format the output in two clear sections separated by two new lines: 
-            - A summary of the article.
-            - A response to the user's query.
+        Your response should include three distinct sections, separated by two blank lines:
 
-        Additional Notes:
-        - Keep the response brief (maximum 150 words).
-        - Ensure the output is easily understandable for non-technical users.
-        - If the article does not answer the question, don't generate summary and return an empty response.
-        - Do not include indentations or extra formatting.
+        1. A single-word answer ('True' or 'False') indicating whether the article might be relevant to the user's query.
+        2. A concise summary of the article in plain, non-technical language.
+        3. A direct, clear response to the user's question, strictly based on the article content, written in simple terms.
 
-        <question>{query}<\question>
-        <article>{context}<\article>
+        Guidelines:
+        - Limit the entire response to a maximum of 150 words.
+        - Avoid extra formatting, unnecessary details, or information outside the article's scope.
+        - Write in a clear, user-friendly tone suitable for non-technical readers.
+
+        <question>{query}</question>
+        <article>{context}</article>
         """
 
         llm = ChatOpenAI(temperature=0.4, model_name="gpt-4o-mini")
@@ -132,13 +127,15 @@ class QueryHandler:
                 # Return the processed result
                 return {
                     "url": sitemap_entry.url,
-                    "analysis": result.content
+                    "analysis": result.content,
+                    "score": sitemap_entry.score
                 }
             except Exception as e:
                 # Handle and log any errors
                 return {
                     "url": sitemap_entry.url,
-                    "analysis": f"Error processing URL {sitemap_entry.url}: {e}"
+                    "analysis": f"Error processing URL {sitemap_entry.url}: {e}",
+                    "score": sitemap_entry.score
                 }
 
         # Use ThreadPoolExecutor to parallelize URL processing
@@ -152,7 +149,8 @@ class QueryHandler:
                 except Exception as e:
                     analyses.append({
                         "url": future_to_url[future],
-                        "analysis": f"Error in processing: {e}"
+                        "analysis": f"Error in processing: {e}",
+                        "score": 0
                     })
 
         return analyses
@@ -172,7 +170,7 @@ class QueryHandler:
             print("-" * 50)
 
 
-    def get_entries_by_score(self, documents: List[Document], query: str, threshold=0.35) -> List[SitemapEntry]:
+    def get_entries_with_score(self, documents: List[Document], query: str, threshold=0.35) -> List[SitemapEntry]:
         """
         Calculate score and get list of unique sources with best score from given source based on Document object.
         Sort unique sources by score. Apply threshold on score.
@@ -195,5 +193,5 @@ class QueryHandler:
         for i, source in enumerate(unique_sources):
             print(f"{i + 1}. {source[1]}, {source[0]}")
 
-        return [SitemapEntry(url=source[0], lastmod=None) for source in unique_sources if source[1] > threshold]
+        return [SitemapEntry(url=source[0], lastmod=None, score=source[1]) for source in unique_sources if source[1] > threshold]
 

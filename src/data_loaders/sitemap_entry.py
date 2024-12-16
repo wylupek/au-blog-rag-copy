@@ -8,6 +8,7 @@ from typing import List
 class SitemapEntry(NamedTuple):
     url: str
     lastmod: Optional[datetime]  # Use datetime for timestamps
+    score: float = 0
 
 
 class Sitemap:
