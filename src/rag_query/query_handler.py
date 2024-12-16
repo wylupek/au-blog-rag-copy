@@ -25,13 +25,13 @@ class QueryHandler:
         results = self.search_documents(user_query=question) 
 
         # Get unique URLs sorted by frequency
-        entries = self.get_entries_with_score(results, question)
+        entries = self.get_entries_with_score(results)
 
         # Generate summary and query answer for each article
         return sorted(self.analyze_summaries(entries, question), key=lambda x: x["score"], reverse=True)
 
 
-    def search_documents(self, user_query: str) -> List[Document]:
+    def search_documents(self, user_query: str, top_k=10) -> List[Document]:
         """Retrieve and return top-k most relevant documents."""
         template = """
         You are an AI language model assistant. Your task is to generate four different versions of the given
@@ -47,42 +47,56 @@ class QueryHandler:
             prompt_perspectives
             | ChatOpenAI(temperature=0, model_name="gpt-4o-mini")
             | StrOutputParser()
-            | (lambda x: [user_query] + [query.strip() for query in x.split("\n") if query.strip()])
+            | (lambda x: [user_query] + [q.strip() for q in x.split("\n") if q.strip()])
         )
 
-        # generated_queries = generate_queries_pipeline.invoke({"question": user_query})
+        generated_queries = generate_queries_pipeline.invoke({"question": user_query})
         # print("Generated queries:")
         # for i, generated_query in enumerate(generated_queries):
         #     print(f"{i + 1}. {generated_query}")
 
-        def get_unique_documents(docs: list[list]):
-            """Unique union of retrieved docs."""
-            flattened_docs = [dumps(doc) for sublist in docs for doc in sublist]
-            unique_docs = list(set(flattened_docs))
-            return [loads(doc) for doc in unique_docs]
+        # Perform searches for all query embeddings and merge results
+        results = []
+        query_embeddings = [self.vectorstore.embeddings.embed_query(q) for q in generated_queries]
+        for query in query_embeddings:
+            response = self.pinecone_index.query(
+                vector=query,
+                top_k=top_k,
+                include_metadata=True,
+                include_values=True,
+            )
+            results.extend(response.matches)
 
-        retriever = self.vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": 10},
-        )
+        # Remove duplicate documents by ID
+        seen_ids = set()
+        unique_results = []
+        for match in results:
+            if match.id not in seen_ids:
+                seen_ids.add(match.id)
+                unique_results.append(match)
 
-        retrieval_chain = (
-                generate_queries_pipeline
-                | retriever.map()
-                | get_unique_documents
-        )
-        documents = retrieval_chain.invoke({"question": user_query})
+        # Convert Pinecone matches to LangChain Documents
+        documents = [
+            Document(
+                page_content=match.metadata.get("text", ""),
+                metadata={**match.metadata,
+                          "score": cosine_similarity([query_embeddings[0]], [match.values])[0][0]},
+            )
+            for match in unique_results
+        ]
 
+        documents = sorted(documents, key=lambda x: x.metadata["score"], reverse=True)
         print(f"Retrieved {len(documents)} documents:")
         for i, document in enumerate(documents):
-            print(f"*** Document {i + 1} ***")
-            print(f"Source: {document.metadata['source']}")
-            print(f"Page Content: {document.page_content[:200]}...\n\n")  # Print first 200 characters
+            print(f"*** Document {i + 1} ***\n"
+                  f"Source: {document.metadata['source']}\n"
+                  f"Score: {document.metadata['score']}\n"
+                  f"Page Content: {document.page_content[:200]}...\n\n")
 
         return documents
 
 
-    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str) -> List[dict]:
+    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str, max_workers=5) -> List[dict]:
         """
         Uses the LLM to analyze how each document summary can answer the user's query.
         This version parallelizes the API calls for efficiency.
@@ -140,7 +154,7 @@ class QueryHandler:
 
         # Use ThreadPoolExecutor to parallelize URL processing
         analyses = []
-        with ThreadPoolExecutor(max_workers=5) as executor:  # Adjust `max_workers` based on your needs
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_url = {executor.submit(process_url, sitemap_entry): sitemap_entry for sitemap_entry in sitemap_entries}
 
             for future in as_completed(future_to_url):
@@ -170,28 +184,23 @@ class QueryHandler:
             print("-" * 50)
 
 
-    def get_entries_with_score(self, documents: List[Document], query: str, threshold=0.35) -> List[SitemapEntry]:
+    def get_entries_with_score(self, documents: List[Document], threshold=0.35) -> List[SitemapEntry]:
         """
-        Calculate score and get list of unique sources with best score from given source based on Document object.
-        Sort unique sources by score. Apply threshold on score.
+        Sort unique sources by score and apply threshold on it.
         :param documents: list of Document objects
-        :param query: user query to calculate score with
         :param threshold: threshold for score
         :return: list of unique SitemapEntry objects
         """
-        embedder = self.vectorstore.embeddings
-        query_vector = embedder.embed_query(query)
 
         unique_sources = {}
         for document in documents:
-            doc_vector = embedder.embed_query(document.page_content)
-            score = cosine_similarity([query_vector], [doc_vector])[0][0]
-            if document.metadata["source"] not in unique_sources or score > unique_sources[document.metadata["source"]]:
-                unique_sources[document.metadata["source"]] = score
-        unique_sources = sorted(unique_sources.items(), key=lambda x: x[1], reverse=True)
+            if (document.metadata["source"] not in unique_sources
+                    or document.metadata["score"] > unique_sources[document.metadata["source"]]):
+                unique_sources[document.metadata["source"]] = document.metadata["score"]
 
-        for i, source in enumerate(unique_sources):
-            print(f"{i + 1}. {source[1]}, {source[0]}")
+        for i, (source, score) in enumerate(unique_sources.items()):
+            print(f"{i + 1}. {score:.3f} - {source}")
 
-        return [SitemapEntry(url=source[0], lastmod=None, score=source[1]) for source in unique_sources if source[1] > threshold]
+        return [SitemapEntry(url=source, lastmod=None, score=score)
+                for source, score in unique_sources.items() if score > threshold]
 
