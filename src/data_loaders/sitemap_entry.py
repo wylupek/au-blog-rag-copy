@@ -4,19 +4,43 @@ from bs4 import BeautifulSoup
 import requests
 from typing import List
 
-# Define the NamedTuple with lastmod as an Optional[datetime]
+
+
 class SitemapEntry(NamedTuple):
+    """
+    Represents a single entry in a sitemap.
+
+    :param url: The URL of the sitemap entry.
+    :param lastmod: The optional datetime of the last modification of the entry.
+    :param score: An optional score associated with the entry. Defaults to 0.
+    """
     url: str
-    lastmod: Optional[datetime]  # Use datetime for timestamps
+    lastmod: Optional[datetime]
     score: float = 0
 
 
 class Sitemap:
+    """
+    A class to fetch and parse XML sitemaps, extracting a list of sitemap entries.
+    """
     def __init__(self, sitemap: str) -> None:
+        """
+        Initialize the Sitemap instance with a given sitemap URL.
+
+        :param sitemap: The URL of the sitemap to fetch and parse.
+        """
         self.sitemap = sitemap
 
+
     def load(self) -> List[SitemapEntry]:
-        # Fetch the sitemap
+        """
+        Load and parse the sitemap to extract entries.
+        Fetches the sitemap content from the provided URL, parses the XML to extract
+        all URL entries along with their optional lastmod timestamps, and returns them
+        as a list of SitemapEntry objects.
+
+        :return: A list of parsed sitemap entries.
+        """
         response = requests.get(self.sitemap)
         sitemap_content = response.content
 

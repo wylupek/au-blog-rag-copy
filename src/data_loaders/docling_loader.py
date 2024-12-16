@@ -8,9 +8,17 @@ import time
 from src.data_loaders.sitemap_entry import SitemapEntry
 
 
+
 class DoclingHTMLLoader(BaseLoader):
     def __init__(self, sitemap_entry: SitemapEntry | list[SitemapEntry],
                  max_retries: int = 3, retry_delay: float = 1.0) -> None:
+        """
+        Initialize the loader with sitemap entries.
+
+        :param sitemap_entry: Single or list of SitemapEntry objects.
+        :param max_retries: Maximum number of retries when fetching and converting documents.
+        :param retry_delay: Delay in seconds between retries.
+        """
         self._file_paths = [se.url for se in sitemap_entry] if isinstance(sitemap_entry, list) \
             else [sitemap_entry.url]
 

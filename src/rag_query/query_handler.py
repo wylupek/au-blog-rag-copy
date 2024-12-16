@@ -1,39 +1,67 @@
+from pinecone import Pinecone
 from typing import List
 from langchain.schema import Document
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.data_loaders.docling_loader import DoclingHTMLLoader
 from langchain_pinecone import PineconeVectorStore
-from src.data_loaders.sitemap_entry import SitemapEntry
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.metrics.pairwise import cosine_similarity
-from pinecone import Pinecone
+from src.data_loaders.docling_loader import DoclingHTMLLoader
+from src.data_loaders.sitemap_entry import SitemapEntry
 
 
 
 class QueryHandler:
+    """
+    A class for handling user queries, retrieving documents,
+    generating summaries and analyses, and filtering results.
+    """
     def __init__(self, vectorstore: PineconeVectorStore, pinecone_index: Pinecone.Index):
+        """
+        Initialize the QueryHandler with a Pinecone vectorstore and index.
+
+        :param vectorstore: The Pinecone vectorstore instance used for document retrieval.
+        :param pinecone_index: The Pinecone index for querying vector embeddings.
+        """
         self.vectorstore = vectorstore
         self.pinecone_index = pinecone_index
         print(f"Pinecone initialized successfully.")
 
 
-    def get_answer(self, question, threshold=0.35, top_k=10, filter_false=False,
+    def get_answer(self, question, threshold=0.35, top_k=10, filter_false=False, max_workers=5,
                    query_generation_model="gpt-4o-mini", analysis_model="gpt-4o-mini"):
-        # return documents based on query
-        results = self.search_documents(user_query=question, top_k=top_k, query_generation_model=query_generation_model)
+        """
+        Retrieve and analyze documents relevant to the user's question.
 
-        # Get unique URLs sorted by frequency
+        :param question: The user question.
+        :param threshold: The score threshold for determining relevant documents.
+        :param top_k: The number of top documents to retrieve for each query variant.
+        :param filter_false: Whether to filter out documents flagged as irrelevant ('False').
+        :param max_workers: Maximum number of threads for parallel processing.
+        :param query_generation_model: The model name for generating alternative queries.
+        :param analysis_model: The model name for summarizing and analyzing the documents.
+        :return: A list of dictionaries containing analysis results for each article.
+        """
+        results = self.search_documents(user_query=question, top_k=top_k,
+                                        query_generation_model=query_generation_model)
         entries = self.get_entries_with_score(results, threshold=threshold)
-
-        # Generate summary and analysis for each article
-        return self.analyze_summaries(entries, question, filter_false=filter_false, analysis_model=analysis_model)
+        return self.analyze_summaries(entries, question, filter_false=filter_false,
+                                      analysis_model=analysis_model, max_workers=max_workers)
 
 
     def search_documents(self, user_query: str, top_k=10,
                          query_generation_model="gpt-4o-mini") -> List[Document]:
-        """Retrieve and return top-k most relevant documents."""
+        """
+        Retrieve documents relevant to the given user query.
+        Generates multiple query variations to improve retrieval diversity, embeds them,
+        queries the Pinecone index, merges results, removes duplicates, and sorts by similarity score.
+
+        :param user_query: The original user query.
+        :param top_k: The number of top documents to retrieve for each query variant.
+        :param query_generation_model: The model name for generating alternative queries.
+        :return: A list of Documents.
+        """
         template = """
         You are an AI language model assistant. Your task is to generate four different versions of the given
         user question to retrieve relevant documents from a vector database. By generating multiple perspectives
@@ -86,7 +114,6 @@ class QueryHandler:
             for match in unique_results
         ]
 
-        documents = sorted(documents, key=lambda x: x.metadata["score"], reverse=True)
         print(f"Retrieved {len(documents)} documents\n")
         for i, document in enumerate(documents):
             print(f"*** Document {i + 1} ***\n"
@@ -101,8 +128,15 @@ class QueryHandler:
     def analyze_summaries(sitemap_entries: [SitemapEntry], question: str, max_workers=5,
                           filter_false=False, analysis_model="gpt-4o-mini") -> List[dict]:
         """
-        Uses the LLM to analyze how each document summary can answer the user's query.
-        This version parallelizes the API calls for efficiency.
+        Analyze each sitemap entry by loading the corresponding article, summarizing it,
+        and determining if it can help the user based on query. Calls the LLM in parallel for efficiency.
+
+        :param sitemap_entries: A list of SitemapEntry objects representing documents to analyze.
+        :param question: The user question.
+        :param max_workers: Maximum number of threads for parallel processing.
+        :param filter_false: Whether to filter out documents flagged as irrelevant ('False').
+        :param analysis_model: The model name for summarizing and analyzing the documents.
+        :return: A list of dictionaries containing analysis results for each article.
         """
 
         template = """
@@ -125,20 +159,20 @@ class QueryHandler:
 
         llm = ChatOpenAI(temperature=0.4, model_name=analysis_model)
 
-        def process_url(sitemap_entry: SitemapEntry):
+        def process_url(sitemap_entry: SitemapEntry) -> dict:
             """
-            Process a single URL: Load the document, send it to the LLM, and return the analysis.
+            Process a single sitemap entry: load the article, call the LLM, and return the analysis.
+
+            :param sitemap_entry: A SitemapEntry object representing the article to analyze.
+            :return: A dictionary containing 'url', 'score', 'decision', 'summary', and 'response'.
             """
             try:
-                # Load the document using the custom loader
                 loader = DoclingHTMLLoader(sitemap_entry)
                 document = loader.load()
 
                 # Format the prompt with the query and document content
                 prompt = ChatPromptTemplate.from_template(template)
                 messages = prompt.format_messages(query=question, context=document[0].page_content)
-
-                # Call the LLM
                 result = llm.invoke(messages)
 
                 result_split = [x.strip() for x in result.content.split("\n") if x.strip()]
@@ -149,7 +183,6 @@ class QueryHandler:
                     summary = ""
                     response = result
 
-                # Return the processed result
                 return {
                     "url": sitemap_entry.url,
                     "score": sitemap_entry.score,
@@ -166,7 +199,6 @@ class QueryHandler:
                     "response": f"Error processing URL {sitemap_entry.url}: {e}",
                 }
 
-        # Use ThreadPoolExecutor to parallelize URL processing
         analyses = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_url = {executor.submit(process_url, sitemap_entry): sitemap_entry for sitemap_entry in sitemap_entries}
@@ -192,27 +224,13 @@ class QueryHandler:
 
 
     @staticmethod
-    def display_results(results: List[dict]) -> None:
-        """
-        Nicely prints the summaries with their corresponding URLs.
-
-        Parameters:
-            results (List[dict]): List of dictionaries containing 'url' and 'analysis'.
-        """
-        print("Analysis Results:\n" + "=" * 50)
-        for i, result in enumerate(results, 1):
-            print(f"URL: {result['url']}")
-            print(f"\n{result['analysis']}")
-            print("-" * 50)
-
-
-    @staticmethod
     def get_entries_with_score(documents: List[Document], threshold=0.35) -> List[SitemapEntry]:
         """
-        Sort unique sources by score and apply threshold on it.
-        :param documents: list of Document objects
-        :param threshold: threshold for score
-        :return: list of unique SitemapEntry objects
+        Extract unique document sources, assign them scores, and apply a minimum score threshold.
+
+        :param documents: A list of Document objects returned from search.
+        :param threshold: The minimum score threshold for filtering documents.
+        :return: A list of SitemapEntry objects passing the score threshold.
         """
 
         unique_sources = {}
