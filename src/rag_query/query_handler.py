@@ -20,18 +20,20 @@ class QueryHandler:
         print(f"Pinecone initialized successfully.")
 
 
-    def get_answer(self, question):
+    def get_answer(self, question, threshold=0.35, top_k=10, filter_false=False,
+                   query_generation_model="gpt-4o-mini", analysis_model="gpt-4o-mini"):
         # return documents based on query
-        results = self.search_documents(user_query=question) 
+        results = self.search_documents(user_query=question, top_k=top_k, query_generation_model=query_generation_model)
 
         # Get unique URLs sorted by frequency
-        entries = self.get_entries_with_score(results)
+        entries = self.get_entries_with_score(results, threshold=threshold)
 
         # Generate summary and query answer for each article
-        return sorted(self.analyze_summaries(entries, question), key=lambda x: x["score"], reverse=True)
+        return self.analyze_summaries(entries, question, filter_false=filter_false, analysis_model=analysis_model)
 
 
-    def search_documents(self, user_query: str, top_k=10) -> List[Document]:
+    def search_documents(self, user_query: str, top_k=10,
+                         query_generation_model="gpt-4o-mini") -> List[Document]:
         """Retrieve and return top-k most relevant documents."""
         template = """
         You are an AI language model assistant. Your task is to generate four different versions of the given
@@ -45,7 +47,7 @@ class QueryHandler:
 
         generate_queries_pipeline = (
             prompt_perspectives
-            | ChatOpenAI(temperature=0, model_name="gpt-4o-mini")
+            | ChatOpenAI(temperature=0, model_name=query_generation_model)
             | StrOutputParser()
             | (lambda x: [user_query] + [q.strip() for q in x.split("\n") if q.strip()])
         )
@@ -96,7 +98,8 @@ class QueryHandler:
         return documents
 
 
-    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str, max_workers=5) -> List[dict]:
+    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str, max_workers=5,
+                          filter_false=False, analysis_model="gpt-4o-mini") -> List[dict]:
         """
         Uses the LLM to analyze how each document summary can answer the user's query.
         This version parallelizes the API calls for efficiency.
@@ -120,7 +123,7 @@ class QueryHandler:
         <article>{context}</article>
         """
 
-        llm = ChatOpenAI(temperature=0.4, model_name="gpt-4o-mini")
+        llm = ChatOpenAI(temperature=0.4, model_name=analysis_model)
 
         def process_url(sitemap_entry: SitemapEntry):
             """
@@ -138,18 +141,30 @@ class QueryHandler:
                 # Call the LLM
                 result = llm(messages)
 
+                result_split = [x.strip() for x in result.content.split("\n") if x.strip()]
+                if len(result_split) == 3:
+                    decision, summary, response = result_split
+                else:
+                    decision = ""
+                    summary = ""
+                    response = result
+
+
                 # Return the processed result
                 return {
                     "url": sitemap_entry.url,
-                    "analysis": result.content,
-                    "score": sitemap_entry.score
+                    "score": sitemap_entry.score,
+                    "decision": decision,
+                    "summary": summary,
+                    "response": response,
                 }
             except Exception as e:
-                # Handle and log any errors
                 return {
                     "url": sitemap_entry.url,
-                    "analysis": f"Error processing URL {sitemap_entry.url}: {e}",
-                    "score": sitemap_entry.score
+                    "score": sitemap_entry.score,
+                    "decision": True,
+                    "summary": "",
+                    "response": f"Error processing URL {sitemap_entry.url}: {e}",
                 }
 
         # Use ThreadPoolExecutor to parallelize URL processing
@@ -163,11 +178,18 @@ class QueryHandler:
                 except Exception as e:
                     analyses.append({
                         "url": future_to_url[future],
-                        "analysis": f"Error in processing: {e}",
-                        "score": 0
+                        "score": 0,
+                        "decision": True,
+                        "summary": "",
+                        "response": f"Error in processing: {e}",
                     })
 
-        return analyses
+        analyses = sorted(analyses, key=lambda x: x["score"], reverse=True)
+        if filter_false:
+            return [analysis for analysis in analyses if analysis['decision'] != "False"]
+
+        return ([analysis for analysis in analyses if analysis['decision'] == "True"] +
+                [analysis for analysis in analyses if analysis['decision'] != "True"])
 
 
     def display_results(self, results: List[dict]) -> None:
