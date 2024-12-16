@@ -3,7 +3,6 @@ from langchain.schema import Document
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.load import dumps, loads
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.data_loaders.docling_loader import DoclingHTMLLoader
 from langchain_pinecone import PineconeVectorStore
@@ -28,7 +27,7 @@ class QueryHandler:
         # Get unique URLs sorted by frequency
         entries = self.get_entries_with_score(results, threshold=threshold)
 
-        # Generate summary and query answer for each article
+        # Generate summary and analysis for each article
         return self.analyze_summaries(entries, question, filter_false=filter_false, analysis_model=analysis_model)
 
 
@@ -88,7 +87,7 @@ class QueryHandler:
         ]
 
         documents = sorted(documents, key=lambda x: x.metadata["score"], reverse=True)
-        print(f"Retrieved {len(documents)} documents:")
+        print(f"Retrieved {len(documents)} documents\n")
         for i, document in enumerate(documents):
             print(f"*** Document {i + 1} ***\n"
                   f"Source: {document.metadata['source']}\n"
@@ -98,7 +97,8 @@ class QueryHandler:
         return documents
 
 
-    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str, max_workers=5,
+    @staticmethod
+    def analyze_summaries(sitemap_entries: [SitemapEntry], question: str, max_workers=5,
                           filter_false=False, analysis_model="gpt-4o-mini") -> List[dict]:
         """
         Uses the LLM to analyze how each document summary can answer the user's query.
@@ -139,7 +139,7 @@ class QueryHandler:
                 messages = prompt.format_messages(query=question, context=document[0].page_content)
 
                 # Call the LLM
-                result = llm(messages)
+                result = llm.invoke(messages)
 
                 result_split = [x.strip() for x in result.content.split("\n") if x.strip()]
                 if len(result_split) == 3:
@@ -148,7 +148,6 @@ class QueryHandler:
                     decision = ""
                     summary = ""
                     response = result
-
 
                 # Return the processed result
                 return {
@@ -192,7 +191,8 @@ class QueryHandler:
                 [analysis for analysis in analyses if analysis['decision'] != "True"])
 
 
-    def display_results(self, results: List[dict]) -> None:
+    @staticmethod
+    def display_results(results: List[dict]) -> None:
         """
         Nicely prints the summaries with their corresponding URLs.
 
@@ -206,7 +206,8 @@ class QueryHandler:
             print("-" * 50)
 
 
-    def get_entries_with_score(self, documents: List[Document], threshold=0.35) -> List[SitemapEntry]:
+    @staticmethod
+    def get_entries_with_score(documents: List[Document], threshold=0.35) -> List[SitemapEntry]:
         """
         Sort unique sources by score and apply threshold on it.
         :param documents: list of Document objects
@@ -225,4 +226,3 @@ class QueryHandler:
 
         return [SitemapEntry(url=source, lastmod=None, score=score)
                 for source, score in unique_sources.items() if score > threshold]
-
