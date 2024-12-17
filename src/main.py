@@ -5,8 +5,6 @@ from rag_query.query_handler import QueryHandler
 from data_loaders.sitemap_entry import Sitemap
 from data_loaders.document_processor import DocumentProcessor
 
-
-
 def main():
     load_dotenv()
 
@@ -15,11 +13,8 @@ def main():
     if not bot_token or not app_token:
         raise ValueError("Missing Slack tokens in environment variables.")
 
-    sitemap = Sitemap(sitemap="https://tech.appunite.com/blog/blog-sitemap.xml")
-    sitemap_entries = sitemap.load()
-
+    #
     document_processor = DocumentProcessor('au-blog-rag')
-    document_processor.update_database(sitemap_entries)
 
     rag_system = QueryHandler(
         vectorstore=document_processor.vectorstore,

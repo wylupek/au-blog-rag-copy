@@ -17,14 +17,13 @@ setup-gcloud:
 	gcloud config set project $(GCP_PROJECT)
 	gcloud auth activate-service-account $(GCP_SERVICE_ACCOUNT) --key-file $(KEY_FILE)
 
-#
 deploy-bot:
 	@docker buildx build --platform $(PLATFORM) \
 		-t gcr.io/$(GCP_PROJECT)/$(BOT_SERVICE_NAME):latest \
 		-f Dockerfile . --push
 
 	@env_vars=$(shell grep -v '^#' .env | xargs | sed 's/ /,/g') && \
-	@gcloud run deploy $(BOT_SERVICE_NAME) \
+	gcloud run deploy $(BOT_SERVICE_NAME) \
 		--image gcr.io/$(GCP_PROJECT)/$(BOT_SERVICE_NAME):latest \
 		--region $(GCP_REGION) \
 		--platform managed \
