@@ -1,21 +1,43 @@
-# Use a base image
-FROM python:3.11-slim
-
-# Install necessary packages
-RUN apk update && apk add --no-cache curl jq bash coreutils util-linux
+# Stage 1: Build Environment
+FROM python:3.11-slim AS builder
 
 # Set the working directory
 WORKDIR /app
 
-# Copy scripts
-COPY infakt/data-scrap.sh /app/data-scrap.sh
-COPY infakt/infakt-clients.sh /app/infakt-clients.sh
-COPY infakt/infakt-invoices.sh /app/infakt-invoices.sh
+# Install build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set the script as executable
-RUN chmod +x /app/data-scrap.sh
-RUN chmod +x /app/infakt-clients.sh 
-RUN chmod +x /app/infakt-invoices.sh
+# Copy the requirements file and install dependencies
+COPY ../requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt --target=/app/dependencies
 
-# Run the script
-CMD ["./data-scrap.sh"]
+# Stage 2: Runtime Environment
+FROM python:3.11-slim
+
+# Set the working directory
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    libffi-dev \
+    libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependencies and application files
+COPY --from=builder /app/dependencies /app/dependencies
+COPY ../src/ /app/src/
+
+# Update the Python path
+ENV PYTHONPATH=/app/dependencies:$PYTHONPATH
+
+# Set the entry point
+CMD ["python", "src/data_loaders/update_database.py"]

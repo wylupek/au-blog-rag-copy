@@ -35,7 +35,6 @@ RUN apt-get update && apt-get install -y \
 # Copy dependencies and application files
 COPY --from=builder /app/dependencies /app/dependencies
 COPY src/ /app/src/
-COPY vector_db/ /app/vector_db/
 
 # Update the Python path
 ENV PYTHONPATH=/app/dependencies:$PYTHONPATH
