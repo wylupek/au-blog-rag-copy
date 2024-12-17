@@ -1,23 +1,29 @@
-import os
 import logging
-import time
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from dotenv import load_dotenv
-
-from rag_query.query_handler import QueryHandler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+
 class SlackBot:
+    """
+    SlackBot class for handling Slack messages, interacting with a RAG system, and responding using Slack Block Kit.
+    """
     def __init__(self, rag_system, slack_bot_token, slack_app_token):
+        """
+        Initialize the SlackBot with a RAG system, Slack bot token, and Slack app token.
+
+        :param rag_system: The QueryHandler object for answering user queries.
+        :param slack_bot_token: The Slack bot token for authentication.
+        :param slack_app_token: The Slack app-level token for Socket Mode.
+        """
         self.app = App(token=slack_bot_token)
         self.rag_system = rag_system
         self.socket_handler = SocketModeHandler(app=self.app, app_token=slack_app_token)
-
         self._register_handlers()
+
 
     def _register_handlers(self):
         @self.app.event("message")
@@ -48,7 +54,9 @@ class SlackBot:
                 logger.error(f"Unexpected error while processing message: {e}")
                 say("An unexpected error occurred. Please try again later.")
 
-    def _is_valid_event(self, event):
+
+    @staticmethod
+    def _is_valid_event(event):
         """Validate the Slack event."""
         if event.get('channel_type') not in ['im', 'group']:
             return False
@@ -58,7 +66,9 @@ class SlackBot:
             raise ValueError("Message text is empty.")
         return True
 
-    def _send_typing_placeholder(self, client, channel_id, user):
+
+    @staticmethod
+    def _send_typing_placeholder(client, channel_id, user):
         """Send a placeholder 'Thinking...' message."""
         try:
             return client.chat_postEphemeral(
@@ -70,17 +80,30 @@ class SlackBot:
             logger.error(f"Failed to send 'Thinking...' placeholder: {e}")
             raise ValueError("Unable to send 'Thinking...' placeholder.")
 
-    def _generate_response(self, text):
-        """Process the user's question and generate a response."""
-        results = self.rag_system.get_answer(text)
 
+    def _generate_response(self, text):
+        """
+        Generate a response to the user's question using the RAG system.
+
+        :param text: The user's query text.
+        :return: A dictionary containing Slack Block Kit message blocks or a plain text message.
+        """
+        results = self.rag_system.get_answer(text, filter_false=False, analysis_model="gpt-4o")
         if not results:
             return "No relevant information found for your query."
-
         return {"blocks": self._build_slack_message_blocks(results)}
 
-    def _send_response(self, client, channel_id, response):
-        """Send the response back to the channel with link unfurling disabled."""
+
+    @staticmethod
+    def _send_response(client, channel_id, response):
+        """
+        Send the generated response back to the Slack channel.
+
+        :param client: The Slack WebClient for API interactions.
+        :param channel_id: The ID of the Slack channel where the response will be sent.
+        :param response: The response to send, either as plain text or Block Kit message blocks.
+        :raises ValueError: If sending the response message fails.
+        """
         try:
             if isinstance(response, dict) and "blocks" in response:
                 client.chat_postMessage(
@@ -99,8 +122,19 @@ class SlackBot:
             raise ValueError("Unable to send the Slack response.")
 
 
-    def _build_slack_message_blocks(self, results):
-        """Build Slack Block Kit message blocks from results."""
+    @staticmethod
+    def _build_slack_message_blocks(results):
+        """
+        Build Slack Block Kit message blocks from query results.
+
+        :param results: List of dictionaries containing the following fields:
+            - url: The URL of the article.
+            - score: The retriever score of the article.
+            - decision: The decision about article relevance.
+            - summary: A brief summary of the article.
+            - response: The response to the user's question, based on the article content.
+        :return: A list of Slack Block Kit message blocks.
+        """
         blocks = [
             {
                 "type": "section",
@@ -114,23 +148,31 @@ class SlackBot:
 
         for result in results[:20]:
             url = result.get('url', 'URL not available')
-            analysis = result.get('analysis', 'Analysis not available')
+            # score = result.get('score', 'Score not available')
+            decision = result.get('decision', 'Decision not available')
+            summary = result.get('summary', 'Summary not available')
+            response = result.get('response', 'Response not available')
 
-            if isinstance(analysis, str) and "Analysis:" in analysis:
-                analysis = analysis.replace("Analysis:", "").strip()
+            result_text = (
+                f"*< {url} >*\n"
+                # f"• *Score:* `{score}`\n"
+                f"• *Decision:* `{decision}`\n"
+                f"• *Summary:* {summary}\n"
+                f"• *Response:* {response}"
+            )
 
             blocks.append(
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"<{url}>\n{analysis}"
+                        "text": result_text
                     }
                 }
             )
             blocks.append({"type": "divider"})
-
         return blocks
+
 
     def start(self):
         """Start the bot."""
@@ -140,3 +182,4 @@ class SlackBot:
         except Exception as e:
             logger.error(f"Bot startup error: {e}")
             raise
+
