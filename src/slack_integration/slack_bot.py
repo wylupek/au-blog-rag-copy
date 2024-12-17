@@ -1,14 +1,10 @@
-import os
 import logging
-import time
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from dotenv import load_dotenv
-
-from rag_query.query_handler import QueryHandler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 
 class SlackBot:
@@ -16,8 +12,8 @@ class SlackBot:
         self.app = App(token=slack_bot_token)
         self.rag_system = rag_system
         self.socket_handler = SocketModeHandler(app=self.app, app_token=slack_app_token)
-
         self._register_handlers()
+
 
     def _register_handlers(self):
         @self.app.event("message")
@@ -48,6 +44,7 @@ class SlackBot:
                 logger.error(f"Unexpected error while processing message: {e}")
                 say("An unexpected error occurred. Please try again later.")
 
+
     def _is_valid_event(self, event):
         """Validate the Slack event."""
         if event.get('channel_type') not in ['im', 'group']:
@@ -57,6 +54,7 @@ class SlackBot:
         if not event.get('text', '').strip():
             raise ValueError("Message text is empty.")
         return True
+
 
     def _send_typing_placeholder(self, client, channel_id, user):
         """Send a placeholder 'Thinking...' message."""
@@ -70,14 +68,16 @@ class SlackBot:
             logger.error(f"Failed to send 'Thinking...' placeholder: {e}")
             raise ValueError("Unable to send 'Thinking...' placeholder.")
 
+
     def _generate_response(self, text):
         """Process the user's question and generate a response."""
-        results = self.rag_system.get_answer(text)
+        results = self.rag_system.get_answer(text, filter_false=False, analysis_model="gpt-4o")
 
         if not results:
             return "No relevant information found for your query."
 
         return {"blocks": self._build_slack_message_blocks(results)}
+
 
     def _send_response(self, client, channel_id, response):
         """Send the response back to the channel with link unfurling disabled."""
@@ -114,23 +114,32 @@ class SlackBot:
 
         for result in results[:20]:
             url = result.get('url', 'URL not available')
-            analysis = result.get('analysis', 'Analysis not available')
+            # score = result.get('score', 'Score not available')
+            decision = result.get('decision', 'Decision not available')
+            summary = result.get('summary', 'Summary not available')
+            response = result.get('response', 'Response not available')
 
-            if isinstance(analysis, str) and "Analysis:" in analysis:
-                analysis = analysis.replace("Analysis:", "").strip()
+            result_text = (
+                f"*< {url} >*\n"
+                # f"• *Score:* `{score}`\n"
+                f"• *Decision:* `{decision}`\n"
+                f"• *Summary:* {summary}\n"
+                f"• *Response:* {response}"
+            )
 
             blocks.append(
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"<{url}>\n{analysis}"
+                        "text": result_text
                     }
                 }
             )
             blocks.append({"type": "divider"})
 
         return blocks
+
 
     def start(self):
         """Start the bot."""
