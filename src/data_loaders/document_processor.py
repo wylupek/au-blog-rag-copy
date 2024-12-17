@@ -4,8 +4,8 @@ import os
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from datetime import datetime
-from src.data_loaders.sitemap_entry import SitemapEntry
-from src.data_loaders.docling_loader import DoclingHTMLLoader
+from data_loaders.sitemap_entry import SitemapEntry
+from data_loaders.docling_loader import DoclingHTMLLoader
 
 
 

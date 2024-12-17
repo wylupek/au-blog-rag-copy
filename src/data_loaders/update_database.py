@@ -2,9 +2,9 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from src.data_loaders.document_processor import DocumentProcessor
+from data_loaders.document_processor import DocumentProcessor
 from dotenv import load_dotenv
-from src.data_loaders.sitemap_entry import Sitemap
+from data_loaders.sitemap_entry import Sitemap
 
 
 if __name__ == '__main__':
