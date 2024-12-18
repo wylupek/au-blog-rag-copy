@@ -1,35 +1,40 @@
 import logging
 from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.flask import SlackRequestHandler
+from flask import Flask, request
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+# https://slack-rag-bot-610678049636.us-central1.run.app/slack/events
 
 class SlackBot:
     """
     SlackBot class for handling Slack messages, interacting with a RAG system, and responding using Slack Block Kit.
     """
-    def __init__(self, rag_system, slack_bot_token, slack_app_token):
+    def __init__(self, rag_system, slack_bot_token, signing_secret):
         """
-        Initialize the SlackBot with a RAG system, Slack bot token, and Slack app token.
+        Initialize the SlackBot with a RAG system, Slack bot token, and signing secret.
 
         :param rag_system: The QueryHandler object for answering user queries.
         :param slack_bot_token: The Slack bot token for authentication.
-        :param slack_app_token: The Slack app-level token for Socket Mode.
+        :param signing_secret: The Slack signing secret for verifying requests.
         """
-        self.app = App(token=slack_bot_token)
-        self.rag_system = rag_system
-        self.socket_handler = SocketModeHandler(app=self.app, app_token=slack_app_token)
+        self.rag_system = rag_system  # Ensure this line is present
+        self.app = App(token=slack_bot_token, signing_secret=signing_secret)
         self._register_handlers()
+        self.flask_app = Flask(__name__)
+        self.handler = SlackRequestHandler(self.app)
 
+        # Route for handling Slack events
+        @self.flask_app.route("/slack/events", methods=["POST"])
+        def slack_events():
+            return self.handler.handle(request)
 
     def _register_handlers(self):
         @self.app.event("message")
-        def handle_message(event, say, ack, client):
+        def handle_message(event, say, client):
             """Main entry point for handling Slack messages."""
-            ack()
             try:
                 if not self._is_valid_event(event):
                     return
@@ -54,7 +59,6 @@ class SlackBot:
                 logger.error(f"Unexpected error while processing message: {e}")
                 say("An unexpected error occurred. Please try again later.")
 
-
     @staticmethod
     def _is_valid_event(event):
         """Validate the Slack event."""
@@ -65,7 +69,6 @@ class SlackBot:
         if not event.get('text', '').strip():
             raise ValueError("Message text is empty.")
         return True
-
 
     @staticmethod
     def _send_typing_placeholder(client, channel_id, user):
@@ -80,7 +83,6 @@ class SlackBot:
             logger.error(f"Failed to send 'Thinking...' placeholder: {e}")
             raise ValueError("Unable to send 'Thinking...' placeholder.")
 
-
     def _generate_response(self, text):
         """
         Generate a response to the user's question using the RAG system.
@@ -92,7 +94,6 @@ class SlackBot:
         if not results:
             return "No relevant information found for your query."
         return {"blocks": self._build_slack_message_blocks(results)}
-
 
     @staticmethod
     def _send_response(client, channel_id, response):
@@ -121,7 +122,6 @@ class SlackBot:
             logger.error(f"Failed to send response message: {e}")
             raise ValueError("Unable to send the Slack response.")
 
-
     @staticmethod
     def _build_slack_message_blocks(results):
         """
@@ -148,14 +148,12 @@ class SlackBot:
 
         for result in results[:20]:
             url = result.get('url', 'URL not available')
-            # score = result.get('score', 'Score not available')
             decision = result.get('decision', 'Decision not available')
             summary = result.get('summary', 'Summary not available')
             response = result.get('response', 'Response not available')
 
             result_text = (
                 f"*< {url} >*\n"
-                # f"• *Score:* `{score}`\n"
                 f"• *Decision:* `{decision}`\n"
                 f"• *Summary:* {summary}\n"
                 f"• *Response:* {response}"
@@ -173,13 +171,6 @@ class SlackBot:
             blocks.append({"type": "divider"})
         return blocks
 
-
     def start(self):
-        """Start the bot."""
-        try:
-            logger.info("Starting Private Channel RAG Bot...")
-            self.socket_handler.start()
-        except Exception as e:
-            logger.error(f"Bot startup error: {e}")
-            raise
-
+        """Start the Flask server."""
+        self.flask_app.run(host="0.0.0.0", port=8080)

@@ -114,6 +114,7 @@ packaging==24.2
 pandas==2.2.3
 pathspec==0.12.1
 pillow==10.4.0
+flask
 pinecone
 pinecone-client
 pinecone-plugin-inference
