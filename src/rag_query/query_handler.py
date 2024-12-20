@@ -11,7 +11,6 @@ from data_loaders.docling_loader import DoclingHTMLLoader
 from data_loaders.sitemap_entry import SitemapEntry
 
 
-
 class QueryHandler:
     """
     A class for handling user queries, retrieving documents,
@@ -124,8 +123,7 @@ class QueryHandler:
         return documents
 
 
-    @staticmethod
-    def analyze_summaries(sitemap_entries: [SitemapEntry], question: str, max_workers=5,
+    def analyze_summaries(self, sitemap_entries: [SitemapEntry], question: str, max_workers=5,
                           filter_false=False, analysis_model="gpt-4o-mini") -> List[dict]:
         """
         Analyze each sitemap entry by loading the corresponding article, summarizing it,
@@ -166,38 +164,63 @@ class QueryHandler:
             :param sitemap_entry: A SitemapEntry object representing the article to analyze.
             :return: A dictionary containing 'url', 'score', 'decision', 'summary', and 'response'.
             """
+            result_dict = {
+                "url": sitemap_entry.url,
+                "score": sitemap_entry.score,
+                "decision": "False",
+                "summary": "",
+                "response": "",
+            }
+
+            # Load the document from database and process it with the LLM
             try:
-                loader = DoclingHTMLLoader(sitemap_entry)
-                document = loader.load()
+                results = self.pinecone_index.query(
+                    vector=[0] * 1536,
+                    filter={"source": {"$eq": sitemap_entry.url}},
+                    top_k=10000,
+                    include_metadata=True,
+                    include_values=False
+                )
+                documents = sorted(
+                    (match['metadata'] for match in results['matches']),
+                    key=lambda x: x.get('start_index', 0)
+                )
+                if not documents:
+                    raise ValueError("No documents found.")
 
-                # Format the prompt with the query and document content
+                reconstructed_string = ""
+                current_position = 0
+                for doc in documents:
+                    start_index = int(doc.get('start_index', 0))
+                    content = doc.get('text', "")
+                    if start_index >= current_position:
+                        reconstructed_string += content
+                    else:
+                        overlap_length = current_position - start_index
+                        reconstructed_string += content[overlap_length:]
+                    current_position = max(current_position, start_index + len(content))
+                if not reconstructed_string:
+                    raise ValueError("Couldn't reconstruct the document.")
+
                 prompt = ChatPromptTemplate.from_template(template)
-                messages = prompt.format_messages(query=question, context=document[0].page_content)
+                messages = prompt.format_messages(query=question, context=reconstructed_string)
                 result = llm.invoke(messages)
+            except Exception as error:
+                result_dict["response"] = f"Error processing URL {sitemap_entry.url}: {error}"
+                return result_dict
 
+            # Parse the LLM response
+            try:
                 result_split = [x.strip() for x in result.content.split("\n") if x.strip()]
                 if len(result_split) == 3:
-                    decision, summary, response = result_split
+                    result_dict["decision"], result_dict["summary"], result_dict["response"] = result_split
                 else:
-                    decision = ""
-                    summary = ""
-                    response = result
+                    result_dict["response"] = result.content
+            except Exception as error:
+                result_dict["response"] = f"Error processing LLM response for {sitemap_entry.url}: {error}"
 
-                return {
-                    "url": sitemap_entry.url,
-                    "score": sitemap_entry.score,
-                    "decision": decision,
-                    "summary": summary,
-                    "response": response,
-                }
-            except Exception as e:
-                return {
-                    "url": sitemap_entry.url,
-                    "score": sitemap_entry.score,
-                    "decision": True,
-                    "summary": "",
-                    "response": f"Error processing URL {sitemap_entry.url}: {e}",
-                }
+            return result_dict
+
 
         analyses = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
