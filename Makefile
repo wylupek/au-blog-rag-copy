@@ -4,7 +4,6 @@ GCP_REGION := us-central1
 BOT_SERVICE_NAME := slack-rag-bot
 DATA_JOB := slack-rag-bot-embedings-job
 KEY_FILE := au-blog-rag-b18c9ebcbeeb.json
-PLATFORM := linux/amd64,linux/arm64  # Specify target platforms for multi-architecture
 
 
 .PHONY: all build push deploy clean
@@ -18,7 +17,7 @@ setup-gcloud:
 	gcloud auth activate-service-account $(GCP_SERVICE_ACCOUNT) --key-file $(KEY_FILE)
 
 deploy-bot:
-	@docker buildx build --platform $(PLATFORM) \
+	@docker build \
 		-t gcr.io/$(GCP_PROJECT)/$(BOT_SERVICE_NAME):latest \
 		-f Dockerfile . --push
 
@@ -38,7 +37,7 @@ run-local-bot:
 
 #
 deploy-data: 
-	@docker buildx build --platform $(PLATFORM) \
+	@docker build \
 		-t gcr.io/$(GCP_PROJECT)/$(DATA_JOB):latest \
 		-f processor/Dockerfile . --push
 	@gcloud run jobs update $(DATA_JOB) \
