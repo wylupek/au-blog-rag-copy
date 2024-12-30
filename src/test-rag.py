@@ -4,6 +4,8 @@ from slack_integration.slack_bot import SlackBot
 from rag_query.query_handler import QueryHandler
 from data_loaders.document_processor import DocumentProcessor
 
+from flask import Flask
+
 def main():
     load_dotenv()
 
@@ -21,16 +23,10 @@ def main():
         pinecone_index=document_processor.pinecone_index
     )
 
-    # Initialize the SlackBot
-    slack_bot = SlackBot(
-        rag_system=rag_system,
-        slack_bot_token=bot_token,
-        signing_secret=signing_secret
-    )
+    text = rag_system.get_answer("We’re discussing with a prospect client that wants to implement an AI feature in the app. Please show me article about our experience and knowledge", filter_false=False, analysis_model="gpt-4o")
 
-    # Start the Flask app (used for webhooks)
-    slack_bot.start()
-
+    print("RESULTS:")
+    print(text)
 
 if __name__ == "__main__":
     main()
