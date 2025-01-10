@@ -16,13 +16,15 @@ class QueryHandler:
     A class for handling user queries, retrieving documents,
     generating summaries and analyses, and filtering results.
     """
-    def __init__(self, vectorstore: PineconeVectorStore, pinecone_index: Pinecone.Index):
+    def __init__(self, vectorstore: PineconeVectorStore, pinecone_index: Pinecone.Index, dimension=384):
         """
         Initialize the QueryHandler with a Pinecone vectorstore and index.
 
         :param vectorstore: The Pinecone vectorstore instance used for document retrieval.
         :param pinecone_index: The Pinecone index for querying vector embeddings.
+        :param dimension: The dimension of the vector embedding.
         """
+        self.dimension = dimension
         self.vectorstore = vectorstore
         self.pinecone_index = pinecone_index
         print(f"Pinecone initialized successfully.")
@@ -175,7 +177,7 @@ class QueryHandler:
             # Load the document from database and process it with the LLM
             try:
                 results = self.pinecone_index.query(
-                    vector=[0] * 1536,
+                    vector=[0] * self.dimension,
                     filter={"source": {"$eq": sitemap_entry.url}},
                     top_k=10000,
                     include_metadata=True,

@@ -1,6 +1,7 @@
 vector_db/
 au-blog-rag-b18c9ebcbeeb.json
 .idea/
+fine-tuned-model/
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,macos

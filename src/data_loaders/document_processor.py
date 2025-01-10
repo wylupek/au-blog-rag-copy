@@ -1,17 +1,17 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 import os
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from datetime import datetime
 from src.data_loaders.sitemap_entry import SitemapEntry
 from src.data_loaders.docling_loader import DoclingHTMLLoader
-
+from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_openai import OpenAIEmbeddings
 
 
 class DocumentProcessor:
     def __init__(self, index_name: str, api_key=os.getenv("PINECONE_API_KEY"),
-                 dimension=1536, cloud='aws', region='us-east-1', metric='cosine'):
+                 dimension=384, cloud='aws', region='us-east-1', metric='cosine'):
         """
         Initialize Pinecone vectorstore and database
 
@@ -23,6 +23,7 @@ class DocumentProcessor:
         :param metric: Distance metric for the index.
         """
 
+        self.dimension = dimension
         pc = Pinecone(api_key=api_key)
         if index_name not in pc.list_indexes().names():
             pc.create_index(
@@ -38,7 +39,8 @@ class DocumentProcessor:
 
         self.pinecone_index = pc.Index(index_name)
 
-        embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+        embeddings = HuggingFaceEmbeddings(model_name="wylupek/au-blog-rag-embedder")
+        # embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
         self.vectorstore = PineconeVectorStore(index=self.pinecone_index, embedding=embeddings)
 
         index_stats = self.pinecone_index.describe_index_stats()
