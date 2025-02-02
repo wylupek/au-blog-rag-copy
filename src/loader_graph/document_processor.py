@@ -1,12 +1,12 @@
+from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 import os
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from datetime import datetime
-from src.data_loaders.sitemap_entry import SitemapEntry
-from src.data_loaders.docling_loader import DoclingHTMLLoader
-
+from src.loader_graph.sitemap_entry import SitemapEntry
+from src.loader_graph.docling_loader import DoclingHTMLLoader
 
 
 class DocumentProcessor:
@@ -49,7 +49,7 @@ class DocumentProcessor:
         print(f"Total vectors: {total_count}")
 
 
-    def _load_entries(self, sitemap_entries: list) -> None:
+    def _load_entries(self, sitemap_entries: List[SitemapEntry]) -> None:
         """
         Scrape and split url's from sitemap_entries.
         Add embedded vectors with metadata to Pinecone database.
@@ -96,7 +96,7 @@ class DocumentProcessor:
         print(f"Total vector count: {self.total_count}")
 
 
-    def update_database(self, sitemap_entries: list) -> None:
+    def update_database(self, sitemap_entries: List[SitemapEntry]) -> None:
         """
         Main function to add data to Pinecone database.
         Load new or updated vectors with metadata. Delete outdated vectors.

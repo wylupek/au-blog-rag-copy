@@ -7,7 +7,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_pinecone import PineconeVectorStore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.metrics.pairwise import cosine_similarity
-from src.data_loaders.sitemap_entry import SitemapEntry
+from src.loader_graph.sitemap_entry import SitemapEntry
 
 
 
