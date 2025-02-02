@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from typing import Annotated, Any, Literal, Optional, Type, TypeVar
-from urllib.parse import urlparse
 
 from langchain_core.runnables import RunnableConfig, ensure_config
 
@@ -18,11 +17,6 @@ class IndexConfiguration:
     retrieval processes, including user identification, embedding model selection,
     retriever provider choice, and search parameters.
     """
-
-    user_id: str = field(
-        default="test",
-        metadata={"description": "Unique identifier for the user."}
-    )
 
     embedding_model: Annotated[
         str,

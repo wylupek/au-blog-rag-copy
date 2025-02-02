@@ -1,17 +1,20 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+import asyncio
+from src.loader_graph.graph import graph
+from src.utils.state import LoaderInputState
+from langchain_core.runnables import RunnableConfig
 
-from src.loader_graph.document_processor import DocumentProcessor
-from dotenv import load_dotenv
-from src.loader_graph.sitemap_entry import Sitemap
+async def run_loader():
+    config = RunnableConfig(
+        configurable={
+            "index_name": "test"
+        }
+    )
+    input_data = LoaderInputState(sitemap="https://tech.appunite.com/blog/blog-sitemap.xml")
+    output = await graph.ainvoke(input_data, config=config)
+    print(output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    from dotenv import load_dotenv
     load_dotenv()
-
-    sitemap = Sitemap(sitemap="https://tech.appunite.com/blog/blog-sitemap.xml")
-    sitemap_entries = sitemap.load()
-
-    document_processor = DocumentProcessor('au-blog-rag')
-    document_processor.update_database(sitemap_entries)
+    asyncio.run(run_loader())
