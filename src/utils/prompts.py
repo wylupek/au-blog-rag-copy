@@ -1,14 +1,5 @@
-"""Default prompts."""
-
-RESPONSE_SYSTEM_PROMPT = """You are a helpful AI assistant. Answer the user's questions based on the retrieved documents.
-
-{retrieved_docs}
-
-System time: {system_time}"""
-QUERY_SYSTEM_PROMPT = """Generate search queries to retrieve documents that may help answer the user's question. Previously, you made the following queries:
-
-<previous_queries/>
-{queries}
-</previous_queries>
-
-System time: {system_time}"""
+QUERY_VARIANTS_PROMPT = """You are an AI language model assistant. 
+Your task is to generate exactly {num_variants} alternative versions of the given user question to help retrieve relevant documents from a vector database. 
+Provide only these alternative questions, each on a new line without numbering. Do not repeat any of the following previously generated queries. 
+Original question: {question}
+Previous queries: {previous_queries}"""

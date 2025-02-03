@@ -82,31 +82,36 @@ T = TypeVar("T", bound=IndexConfiguration)
 
 # noinspection PyUnresolvedReferences
 @dataclass(kw_only=True)
-class Configuration(IndexConfiguration):
+class RAGConfiguration(IndexConfiguration):
     """The configuration for the agent."""
 
-    response_system_prompt: str = field(
-        default=prompts.RESPONSE_SYSTEM_PROMPT,
-        metadata={"description": "The system prompt used for generating responses."},
+    num_query_variants: int = field(
+        default=4,
+        metadata={"description": "The number of alternative retrieval queries to generate."}
     )
 
-    response_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
-        default="openai/gpt-4-mini",
-        metadata={
-            "description": "The language model used for generating responses. Should be in the form: provider/model-name."
-        },
+    query_variants_prompt: str = field(
+        default=prompts.QUERY_VARIANTS_PROMPT,
+        metadata={"description": "The system prompt used for generating alternative queries for retrieval."},
     )
 
-    query_system_prompt: str = field(
-        default=prompts.QUERY_SYSTEM_PROMPT,
-        metadata={
-            "description": "The system prompt used for processing and refining queries."
-        },
-    )
-
-    query_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
-        default="openai/gpt-4-mini",
-        metadata={
-            "description": "The language model used for processing and refining queries. Should be in the form: provider/model-name."
-        },
-    )
+    # response_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+    #     default="openai/gpt-4-mini",
+    #     metadata={
+    #         "description": "The language model used for generating responses. Should be in the form: provider/model-name."
+    #     },
+    # )
+    #
+    # query_system_prompt: str = field(
+    #     default=prompts.QUERY_SYSTEM_PROMPT,
+    #     metadata={
+    #         "description": "The system prompt used for processing and refining queries."
+    #     },
+    # )
+    #
+    # query_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+    #     default="openai/gpt-4-mini",
+    #     metadata={
+    #         "description": "The language model used for processing and refining queries. Should be in the form: provider/model-name."
+    #     },
+    # )
