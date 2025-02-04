@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, Optional, List
 
 from langchain_core.documents import Document
+
 from src.utils.vector_store_manager import VectorStoreManager
 from src.utils.sitemap_entry import SitemapEntry
 

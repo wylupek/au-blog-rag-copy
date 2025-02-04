@@ -1,4 +1,5 @@
 from typing import Optional, List
+from dataclasses import dataclass, field
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
@@ -8,11 +9,43 @@ from langchain_core.documents import Document
 
 from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pydantic import create_model, Field
 
 from src.utils.configuration import RAGConfiguration
 from src.utils.state import RAGState, RAGOutputState
 from src.utils.vector_store_manager import VectorStoreManager
 from src.utils.sitemap_entry import SitemapEntry
+
+
+@dataclass(kw_only=True)
+class Result:
+    url: str = field(
+        metadata={"description": "The URL of the article being analyzed"}
+    )
+    score: float = field(
+        default=0,
+        metadata={"description": "The similarity score of the article to the user's query"},
+    )
+
+    decision: bool = field(
+        default=False,
+        metadata={"description": "The decision of the analysis"},
+    )
+    summary: str = field(
+        default="",
+        metadata={"description": "The summary of the article"},
+    )
+    analysis: str = field(
+        default="",
+        metadata={"description": "The analysis of the article and user query"},
+    )
+
+    def __str__(self):
+        return (f"Result(\n"
+                f"\tdecision = {self.decision} | score = {self.score:.3f} | url = {self.url}\n"
+                f"\tanalysis = {self.analysis}\n"
+                f"\tsummary = {self.summary}\n"
+                f")")
 
 
 async def initialize_vector_store(
@@ -77,16 +110,19 @@ async def retrieve_documents(
         raise ValueError("No generated queries found in state.")
     if not state.vector_store_manager:
         raise ValueError("No vector store manager found in state.")
+    if not config:
+        raise ValueError("Configuration required to run initialize_vector_store.")
+    configuration = RAGConfiguration.from_runnable_config(config)
+
     vsm = state.vector_store_manager
 
     # Perform searches for all query embeddings and merge results
     query_embeddings = [vsm.embeddings.embed_query(q) for q in state.generated_queries]
-    top_k = 10
     results = []
     for query in query_embeddings:
         response = vsm.pinecone_index.query(
             vector=query,
-            top_k=top_k,
+            top_k=configuration.top_k,
             include_metadata=True,
             include_values=True,
         )
@@ -132,9 +168,12 @@ async def get_entries_with_score(
     print("Getting entries with score")
     if not state.retrieved_documents or len(state.retrieved_documents) == 0:
         raise ValueError("No retrieved documents found in state.")
+    if not config:
+        raise ValueError("Configuration required to run initialize_vector_store.")
+    configuration = RAGConfiguration.from_runnable_config(config)
 
     documents: List[Document] = state.retrieved_documents
-    threshold = 0.35
+    threshold = configuration.threshold
 
     unique_sources = {}
     for document in documents:
@@ -154,7 +193,7 @@ async def get_entries_with_score(
 
 async def analyze_summaries(
     state: RAGState, *, config: Optional[RunnableConfig] = None
-) -> dict[str, List[dict]]:
+) -> dict[str, List[Result]]:
     print("Analyzing summaries")
     if not config:
         raise ValueError("Configuration required to run initialize_vector_store.")
@@ -171,36 +210,36 @@ async def analyze_summaries(
     filter_false = configuration.filter_false
     template = configuration.analysis_prompt
 
+    analysis_scheme = create_model(
+        "AnalysisModel",
+        decision=(bool, Field(default=False, description=configuration.result_decision_prompt)),
+        summary=(str, Field(default="", description=configuration.result_summary_prompt)),
+        analysis=(str, Field(default="", description=configuration.result_analysis_prompt)),
+    )
+
     prompt = ChatPromptTemplate.from_template(template)
     llm = ChatOpenAI(temperature=0.4, model_name=analysis_model)
-
+    structured_llm = llm.with_structured_output(analysis_scheme)
 
     # Define a helper function that processes a single sitemap entry.
-    def process_entry(sitemap_entry: SitemapEntry) -> dict:
-        result_dict = {
-            "url": sitemap_entry.url,
-            "score": sitemap_entry.score,
-            "decision": "False",
-            "summary": "",
-            "response": ""
-        }
+    def process_entry(sitemap_entry: SitemapEntry) -> Result:
+        result = Result(url=sitemap_entry.url, score=sitemap_entry.score)
+        # Reconstruct the article text by merging fragments.
         try:
-            # Query the vector store for document fragments related to this URL.
             response = vsm.pinecone_index.query(
-                vector=[0] * 1536,  # Dummy vector; you may adjust the retrieval method as needed.
+                vector=[0] * vsm.dimension,
                 filter={"source": {"$eq": sitemap_entry.url}},
                 top_k=10000,
                 include_metadata=True,
                 include_values=False
             )
-            # Sort the returned matches by 'start_index' (assumed to be in metadata)
             docs = sorted(
                 (match["metadata"] for match in response["matches"]),
                 key=lambda x: x.get("start_index", 0)
             )
             if not docs:
                 raise ValueError("No documents found.")
-            # Reconstruct the article text by merging fragments.
+
             reconstructed = ""
             current_pos = 0
             for doc in docs:
@@ -214,22 +253,21 @@ async def analyze_summaries(
                 current_pos = max(current_pos, start_index + len(content))
             if not reconstructed:
                 raise ValueError("Couldn't reconstruct the document.")
-            # Format the prompt with the original query and the reconstructed article text.
-            messages = prompt.format_messages(query=state.query, context=reconstructed)
-            llm_result = llm.invoke(messages)
         except Exception as error:
-            result_dict["response"] = f"Error processing URL {sitemap_entry.url}: {error}"
-            return result_dict
+            result.analysis = f"Error processing URL {sitemap_entry.url}: {error}"
+            return result
+
+        # Format the prompt with the original query and the reconstructed article text.
+        messages = prompt.format_messages(query=state.query, context=reconstructed)
+        llm_result = structured_llm.invoke(messages)
+
         try:
-            # Parse the LLM response into three sections (decision, summary, response).
-            result_split = [line.strip() for line in llm_result.content.split("\n") if line.strip()]
-            if len(result_split) == 3:
-                result_dict["decision"], result_dict["summary"], result_dict["response"] = result_split
-            else:
-                result_dict["response"] = llm_result.content
+            result.decision = llm_result.decision
+            result.summary = llm_result.summary
+            result.analysis = llm_result.analysis
         except Exception as error:
-            result_dict["response"] = f"Error processing LLM response for {sitemap_entry.url}: {error}"
-        return result_dict
+            result.analysis = f"Error processing LLM response for {sitemap_entry.url}: {error}"
+        return result
 
     # Process each sitemap entry concurrently using ThreadPoolExecutor.
     max_workers = 5
@@ -240,20 +278,15 @@ async def analyze_summaries(
             try:
                 analyses.append(future.result())
             except Exception as e:
-                analyses.append({
-                    "url": future_to_entry[future].url,
-                    "score": 0,
-                    "decision": "False",
-                    "summary": "",
-                    "response": f"Error in processing: {e}"
-                })
+                analyses.append(Result(url=future_to_entry[future].url, analysis=f"Error in processing: {e}"))
 
-    analyses = sorted(analyses, key=lambda x: x["score"], reverse=True)
+
+    analyses = sorted(analyses, key=lambda x: x.score, reverse=True)
     if filter_false:
-        analyses = [analysis for analysis in analyses if analysis["decision"] != "False"]
+        analyses = [analysis for analysis in analyses if analysis.decision != False]
     else:
-        analyses = ([analysis for analysis in analyses if analysis["decision"] == "True"] +
-                    [analysis for analysis in analyses if analysis["decision"] != "True"])
+        analyses = ([analysis for analysis in analyses if analysis.decision == True] +
+                    [analysis for analysis in analyses if analysis.decision != True])
     return {"analyses": analyses}
 
 

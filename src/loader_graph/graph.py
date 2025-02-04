@@ -5,7 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langgraph.graph import StateGraph
 
-from src.utils.configuration import IndexConfiguration
+from src.utils.configuration import LoaderConfiguration
 from src.utils.state import LoaderState, LoaderInputState
 from src.loader_graph.docling_loader import DoclingHTMLLoader
 from src.utils.vector_store_manager import VectorStoreManager
@@ -24,7 +24,7 @@ async def initialize_vector_store(
 ) -> dict[str, VectorStoreManager]:
     if not config:
         raise ValueError("Configuration required to run initialize_vector_store.")
-    configuration = IndexConfiguration.from_runnable_config(config)
+    configuration = LoaderConfiguration.from_runnable_config(config)
     return {"vector_store_manager": VectorStoreManager(configuration.index_name)}
 
 
@@ -140,7 +140,7 @@ async def create_documents(
 
 
 
-builder = StateGraph(LoaderState, input=LoaderInputState, config_schema=IndexConfiguration)
+builder = StateGraph(LoaderState, input=LoaderInputState, config_schema=LoaderConfiguration)
 builder.add_node(extract_sitemap_entries)
 builder.add_node(initialize_vector_store)
 builder.add_node(filter_sitemap_entries)

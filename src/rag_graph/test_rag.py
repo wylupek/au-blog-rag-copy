@@ -7,10 +7,13 @@ async def check_queries():
     config = RunnableConfig(
         configurable={
             "index_name": "test",
-            "filter_false": True
+            "filter_false": True,
+            "result_summary_prompt": "A concise summary of the article in plain, non-technical language"
         }
     )
-    input_data = RAGState(query="We're discussing with a prospect client that wants to implement an AI feature in the app. Please show me article about our experience and knowledge")
+    input_data = RAGState(
+        query="We're discussing with a prospect client that wants to implement an AI feature in the app. Please show me article about our experience and knowledge."
+    )
     output = await graph.ainvoke(input_data, config=config)
     for analysis in output['analyses']:
         print(analysis)

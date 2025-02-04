@@ -11,6 +11,8 @@ class VectorStoreManager:
         Handles vector_store initialization, metadata tracking, and index operations.
         """
 
+        self.dimension = dimension
+
         # Initialize Pinecone
         self.pinecone_client = Pinecone(api_key=api_key)
 
@@ -18,7 +20,7 @@ class VectorStoreManager:
         if index_name not in self.pinecone_client.list_indexes().names():
             self.pinecone_client.create_index(
                 name=index_name,
-                dimension=dimension,
+                dimension=self.dimension,
                 metric=metric,
                 spec=ServerlessSpec(cloud=cloud, region=region)
             )
