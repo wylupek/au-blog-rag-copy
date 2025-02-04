@@ -8,8 +8,8 @@ from langgraph.graph import StateGraph
 from src.utils.configuration import IndexConfiguration
 from src.utils.state import LoaderState, LoaderInputState
 from src.loader_graph.docling_loader import DoclingHTMLLoader
-from src.loader_graph.vector_store_manager import VectorStoreManager
-from src.loader_graph.sitemap_entry import Sitemap, SitemapEntry
+from src.utils.vector_store_manager import VectorStoreManager
+from src.utils.sitemap_entry import Sitemap, SitemapEntry
 
 
 # Node 1: Extract sitemap entries from input
@@ -94,7 +94,7 @@ async def filter_sitemap_entries(
 # Node 4: Create documents from sitemap entries, process, and index them
 async def create_documents(
     state: LoaderState, *, config: Optional[RunnableConfig] = None
-) -> dict[str, str]:
+) -> dict[str, list]:
     if state.vector_store_manager is None:
         raise ValueError("VectorStoreManager not found in state.")
     vsm = state.vector_store_manager
@@ -136,7 +136,7 @@ async def create_documents(
 
     print(f"Loaded {len(processed_documents)} vectors into database.")
     print(f"Total vector count: {vsm.total_count}")
-    return {"sitemap_entries": "delete"}
+    return {"sitemap_entries": []}
 
 
 

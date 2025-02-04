@@ -28,35 +28,12 @@ class IndexConfiguration:
         },
     )
 
-    retriever_provider: Annotated[
-        Literal["elastic", "elastic-local", "pinecone", "mongodb"],
-        {"__template_metadata__": {"kind": "retriever"}},
-    ] = field(
-        default="pinecone",
-        metadata={
-            "description": "The vector store provider to use for retrieval. Options are 'elastic', 'pinecone', or 'mongodb'."
-        },
-    )
-
-    search_kwargs: dict[str, Any] = field(
-        default_factory=dict,
-        metadata={
-            "description": "Additional keyword arguments to pass to the search function of the retriever."
-        },
-    )
-
     index_name: str = field(
         default="default",
         metadata={
             "description": "Pinecone index name for vectorstore."
         },
     )
-
-    # def __post_init__(self):
-    #     """Automatically validate sitemap_entry after initialization."""
-    #     parsed = urlparse(self.sitemap)
-    #     if not all([parsed.scheme, parsed.netloc]):
-    #         raise ValueError(f"Invalid sitemap entry URL: {self.sitemap}")
 
 
     @classmethod
@@ -93,6 +70,30 @@ class RAGConfiguration(IndexConfiguration):
     query_variants_prompt: str = field(
         default=prompts.QUERY_VARIANTS_PROMPT,
         metadata={"description": "The system prompt used for generating alternative queries for retrieval."},
+    )
+
+    query_variants_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+        default="gpt-4o-mini",
+        metadata={
+            "description": "The OpenAI language model used for generating alternative queries."
+        },
+    )
+
+    analysis_prompt: str = field(
+        default=prompts.ANALYSIS_PROMPT,
+        metadata={"description": "The system prompt used for analyzing the retrieved documents."},
+    )
+
+    analysis_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+        default="gpt-4o",
+        metadata={
+            "description": "The OpenAI language model used for analyzing the retrieved documents."
+        },
+    )
+
+    filter_false: bool = field(
+        default=False,
+        metadata={"description": "Filter out articles with decision 'False' from the retrieved articles."}
     )
 
     # response_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(

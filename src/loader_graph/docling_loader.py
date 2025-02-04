@@ -5,7 +5,7 @@ from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter
 import requests
 import time
-from src.loader_graph.sitemap_entry import SitemapEntry
+from src.utils.sitemap_entry import SitemapEntry
 
 
 
