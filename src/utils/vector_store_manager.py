@@ -48,3 +48,20 @@ class VectorStoreManager:
         if len(ids) != 0:
             self.pinecone_index.delete(ids=ids)
             self.total_count -= len(ids)
+
+    def get_all_documents(self, namespace: str = None):
+        """
+        Retrieve all documents
+
+        :param namespace: (Optional) Namespace for filtering documents.
+        :return: List of documents with their metadata.
+        """
+        try:
+            dummy_query = ""
+            results = self.vector_store.similarity_search(query=dummy_query, k=self.total_count, namespace=namespace)
+            documents = [{"content": doc.page_content, "metadata": doc.metadata} for doc in results]
+            print(f"Found {len(documents)} documents.")
+            return documents
+        except Exception as e:
+            print(f"Failed to retrieve documents: {e}")
+            return []
