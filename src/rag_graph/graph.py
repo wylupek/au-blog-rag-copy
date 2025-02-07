@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import create_model, Field
 
 from src.utils.configuration import RAGConfiguration
-from src.utils.state import RAGState, RAGOutputState
+from src.utils.state import RAGState, RAGOutputState, RAGInputState
 from src.utils.vector_store_manager import VectorStoreManager
 from src.utils.sitemap_entry import SitemapEntry
 
@@ -48,14 +48,10 @@ class Result:
                 f")")
 
 
-async def initialize_vector_store(
+async def save_input_query(
     state: RAGState, *, config: Optional[RunnableConfig] = None
-) -> dict[str, VectorStoreManager]:
-    print("Initializing vector store")
-    if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
-    configuration = RAGConfiguration.from_runnable_config(config)
-    return {"vector_store_manager": VectorStoreManager(configuration.index_name)}
+) -> dict[str, str]:
+    return {"query": state.query}
 
 
 async def generate_query_variants(
@@ -63,7 +59,7 @@ async def generate_query_variants(
 ) -> dict[str, List[str]]:
     print("Generating query variants")
     if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
+        raise ValueError("Configuration required to run <generate_query_variants>.")
     configuration = RAGConfiguration.from_runnable_config(config)
 
     # RAGInputState doesn't have the generated_queries attribute, but RAGState does.
@@ -91,7 +87,7 @@ async def check_query_variants(
     state: RAGState, *, config: Optional[RunnableConfig] = None
 ) -> Literal["retrieve_documents", "generate_query_variants"]:
     if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
+        raise ValueError("Configuration required to run <check_query_variants>.")
     configuration = RAGConfiguration.from_runnable_config(config)
     num_query_variants = configuration.num_query_variants
 
@@ -106,15 +102,12 @@ async def retrieve_documents(
         state: RAGState, *, config: Optional[RunnableConfig] = None
 ) -> dict[str, List[Document]]:
     print("Retrieving documents")
-    if not state.generated_queries or len(state.generated_queries) == 0:
+    if not state.generated_queries:
         raise ValueError("No generated queries found in state.")
-    if not state.vector_store_manager:
-        raise ValueError("No vector store manager found in state.")
     if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
+        raise ValueError("Configuration required to run <retrieve_documents>.")
     configuration = RAGConfiguration.from_runnable_config(config)
-
-    vsm = state.vector_store_manager
+    vsm = VectorStoreManager(configuration.index_name)
 
     # Perform searches for all query embeddings and merge results
     query_embeddings = [vsm.embeddings.embed_query(q) for q in state.generated_queries]
@@ -169,7 +162,7 @@ async def get_entries_with_score(
     if not state.retrieved_documents or len(state.retrieved_documents) == 0:
         raise ValueError("No retrieved documents found in state.")
     if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
+        raise ValueError("Configuration required to run <get_entries_with_score>.")
     configuration = RAGConfiguration.from_runnable_config(config)
 
     documents: List[Document] = state.retrieved_documents
@@ -195,16 +188,15 @@ async def analyze_summaries(
     state: RAGState, *, config: Optional[RunnableConfig] = None
 ) -> dict[str, List[Result]]:
     print("Analyzing summaries")
-    if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
     if not state.sitemap_entries:
         raise ValueError("No sitemap entries found in state.")
-    if not state.vector_store_manager:
-        raise ValueError("No vector store manager found in state.")
+    if not config:
+        raise ValueError("Configuration required to run <analyze_summaries>.")
+    configuration = RAGConfiguration.from_runnable_config(config)
+    vsm = VectorStoreManager(configuration.index_name)
 
     configuration = RAGConfiguration.from_runnable_config(config)
     sitemap_entries: List[SitemapEntry] = state.sitemap_entries
-    vsm = state.vector_store_manager
 
     analysis_model = configuration.analysis_model
     filter_false = configuration.filter_false
@@ -290,16 +282,18 @@ async def analyze_summaries(
     return {"analyses": analyses}
 
 
-builder = StateGraph(RAGState, output=RAGOutputState, config_schema=RAGConfiguration)
-builder.add_node(initialize_vector_store)
+builder = StateGraph(RAGState,
+                     input=RAGInputState,
+                     output=RAGOutputState,
+                     config_schema=RAGConfiguration)
+builder.add_node(save_input_query)
 builder.add_node(generate_query_variants)
 builder.add_node(retrieve_documents)
 builder.add_node(get_entries_with_score)
 builder.add_node(analyze_summaries)
 
-builder.add_edge("__start__", "initialize_vector_store")
-builder.add_edge("__start__", "generate_query_variants")
-builder.add_edge("initialize_vector_store", "retrieve_documents")
+builder.add_edge("__start__", "save_input_query")
+builder.add_edge("save_input_query", "generate_query_variants")
 builder.add_conditional_edges(
     "generate_query_variants",
     check_query_variants

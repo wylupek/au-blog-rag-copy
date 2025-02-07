@@ -2,33 +2,59 @@ import os
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
+
 from pinecone import Pinecone, ServerlessSpec
 
+
 class VectorStoreManager:
+    # Cache instances keyed by index_name to avoid reinitializing connections unnecessarily
+    _instances = {}
+
+    def __new__(cls, index_name: str, *args, **kwargs):
+        # If an instance already exists for the given index_name, return it.
+        if index_name in cls._instances:
+            return cls._instances[index_name]
+        instance = super().__new__(cls)
+        cls._instances[index_name] = instance
+        return instance
+
+
     def __init__(self, index_name: str, api_key=os.getenv("PINECONE_API_KEY"),
                  dimension=1536, cloud='aws', region='us-east-1', metric='cosine'):
         """
         Handles vector_store initialization, metadata tracking, and index operations.
         """
+        # Prevent reinitialization if already done
+        if hasattr(self, "_initialized") and self._initialized:
+            return
 
+        self.index_name = index_name
+        self.api_key = api_key
         self.dimension = dimension
+        self.cloud = cloud
+        self.region = region
+        self.metric = metric
 
+        self._initialize_connections()
+        self._initialized = True
+
+    def _initialize_connections(self):
         # Initialize Pinecone
-        self.pinecone_client = Pinecone(api_key=api_key)
+        self.pinecone_client = Pinecone(api_key=self.api_key)
 
         # Create or load index
-        if index_name not in self.pinecone_client.list_indexes().names():
+        if self.index_name not in self.pinecone_client.list_indexes().names():
             self.pinecone_client.create_index(
-                name=index_name,
+                name=self.index_name,
                 dimension=self.dimension,
-                metric=metric,
-                spec=ServerlessSpec(cloud=cloud, region=region)
+                metric=self.metric,
+                spec=ServerlessSpec(cloud=self.cloud, region=self.region)
             )
-            print(f"Index '{index_name}' created.")
+            print(f"Index '{self.index_name}' created.")
         else:
-            print(f"Index '{index_name}' loaded.")
+            print(f"Index '{self.index_name}' loaded.")
 
-        self.pinecone_index = self.pinecone_client.Index(index_name)
+        self.pinecone_index = self.pinecone_client.Index(self.index_name)
 
         # Setup embedding model
         self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -47,7 +73,7 @@ class VectorStoreManager:
             raise RuntimeError("Failed to retrieve index stats.")
 
     def delete_by_ids(self, ids: list) -> None:
-        if len(ids) != 0:
+        if ids:
             self.pinecone_index.delete(ids=ids)
             self.total_count -= len(ids)
 

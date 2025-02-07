@@ -18,17 +18,7 @@ async def extract_sitemap_entries(state: LoaderInputState) -> dict[str, List[Sit
     return {"sitemap_entries": sitemap.load()}
 
 
-# Node 2: Initialize the vector store using configuration and store it in state
-async def initialize_vector_store(
-    state: LoaderState, *, config: Optional[RunnableConfig] = None
-) -> dict[str, VectorStoreManager]:
-    if not config:
-        raise ValueError("Configuration required to run initialize_vector_store.")
-    configuration = LoaderConfiguration.from_runnable_config(config)
-    return {"vector_store_manager": VectorStoreManager(configuration.index_name)}
-
-
-# Node 3: Filter sitemap entries based on existing vectors in the index
+# Node 2: Filter sitemap entries based on existing vectors in the index
 async def filter_sitemap_entries(
     state: LoaderState, *, config: Optional[RunnableConfig] = None
 ) -> dict[str, List[SitemapEntry]]:
@@ -36,9 +26,10 @@ async def filter_sitemap_entries(
         raise ValueError("No sitemap entries found in state.")
     sitemap_entries = state.sitemap_entries
 
-    if state.vector_store_manager is None:
-        raise ValueError("VectorStoreManager not found in state.")
-    vsm = state.vector_store_manager
+    if not config:
+        raise ValueError("Configuration required to run <filter_sitemap_entries>.")
+    configuration = LoaderConfiguration.from_runnable_config(config)
+    vsm = VectorStoreManager(configuration.index_name)
 
     k = 1 if vsm.total_count == 0 else vsm.total_count
     dummy_query = ""
@@ -91,17 +82,18 @@ async def filter_sitemap_entries(
     return {"sitemap_entries": new_entries}
 
 
-# Node 4: Create documents from sitemap entries, process, and index them
+# Node 3: Create documents from sitemap entries, process, and index them
 async def create_documents(
     state: LoaderState, *, config: Optional[RunnableConfig] = None
-) -> dict[str, list]:
-    if state.vector_store_manager is None:
-        raise ValueError("VectorStoreManager not found in state.")
-    vsm = state.vector_store_manager
-
-    if state.sitemap_entries is None:
-        raise ValueError("No sitemap entries found in state.")
+) -> dict[str, int]:
+    if not state.sitemap_entries:
+        return {"documents_count": 0}
     sitemap_entries = state.sitemap_entries
+
+    if not config:
+        raise ValueError("Configuration required to run <create_documents>.")
+    configuration = LoaderConfiguration.from_runnable_config(config)
+    vsm = VectorStoreManager(configuration.index_name)
 
     loader = DoclingHTMLLoader(sitemap_entry=sitemap_entries)
     documents = loader.load()
@@ -136,18 +128,17 @@ async def create_documents(
 
     print(f"Loaded {len(processed_documents)} vectors into database.")
     print(f"Total vector count: {vsm.total_count}")
-    return {"sitemap_entries": []}
+    return {"documents_count": len(processed_documents)}
 
 
 
 builder = StateGraph(LoaderState, input=LoaderInputState, config_schema=LoaderConfiguration)
 builder.add_node(extract_sitemap_entries)
-builder.add_node(initialize_vector_store)
 builder.add_node(filter_sitemap_entries)
 builder.add_node(create_documents)
+
 builder.add_edge("__start__", "extract_sitemap_entries")
-builder.add_edge("extract_sitemap_entries", "initialize_vector_store")
-builder.add_edge("initialize_vector_store", "filter_sitemap_entries")
+builder.add_edge("extract_sitemap_entries", "filter_sitemap_entries")
 builder.add_edge("filter_sitemap_entries", "create_documents")
 graph = builder.compile()
 graph.name = "LoaderGraph"

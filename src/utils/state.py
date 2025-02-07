@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Annotated, Optional, List
+from typing import Annotated, List
 
 from langchain_core.documents import Document
 
-from src.utils.vector_store_manager import VectorStoreManager
 from src.utils.sitemap_entry import SitemapEntry
 
 
@@ -11,12 +10,15 @@ from src.utils.sitemap_entry import SitemapEntry
 @dataclass(kw_only=True)
 class LoaderState:
     sitemap_entries: List[SitemapEntry] = field(default_factory=list)
-    vector_store_manager: Optional[VectorStoreManager] = None # Maybe initialize this earlier, so RAG graph can use it
 
 
 @dataclass(kw_only=True)
 class LoaderInputState:
-    sitemap: str
+    sitemap: str = field(default="https://tech.appunite.com/blog/blog-sitemap.xml")
+
+@dataclass(kw_only=True)
+class LoaderOutputState:
+    documents_count: int
 
 
 def reduce_generated_queries(
@@ -34,3 +36,6 @@ class RAGState(LoaderState):
 
 class RAGOutputState:
     analyses: List[dict] =  field(default_factory=list)
+
+class RAGInputState:
+    query: str
