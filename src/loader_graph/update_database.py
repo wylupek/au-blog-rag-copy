@@ -6,10 +6,10 @@ from langchain_core.runnables import RunnableConfig
 async def run_loader():
     config = RunnableConfig(
         configurable={
-            "index_name": "test"
+            "index_name": "au-blog-rag-fine-tuned"
         }
     )
-    input_data = LoaderInputState(sitemap="https://tech.appunite.com/blog/blog-sitemap.xml")
+    input_data = LoaderInputState(sitemap="gi")
     output = await graph.ainvoke(input_data, config=config)
     print(output)
 

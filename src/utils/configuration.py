@@ -11,13 +11,17 @@ from src.utils import prompts
 # noinspection PyUnresolvedReferences
 @dataclass(kw_only=True)
 class LoaderConfiguration:
-    embedding_model: Annotated[str, {"__template_metadata__": {"kind": "embeddings"}}] = field(
-        default="openai/text-embedding-3-small",
-        metadata={"description": "Name of the embedding model to use. Must be a valid embedding model name."},
+    embedding_model: Annotated[
+        str,
+        {"__template_metadata__": {"kind": "embeddings"}}
+    ] = field(
+        default="wylupek/au-blog-rag-embedder",
+        metadata={"description": "Name of the embedding model to use. "
+                                 "Must be a 'wylupek/au-blog-rag-embedder' or 'openai/text-embedding-3-small.'"},
     )
 
     index_name: str = field(
-        default="default",
+        default="au-blog-rag-fine-tuned",
         metadata={"description": "Pinecone index name for vectorstore."},
     )
 
@@ -58,7 +62,7 @@ class RAGConfiguration(LoaderConfiguration):
     )
 
     threshold: float = field(
-        default=0.35,
+        default=0.30,
         metadata={"description": "The threshold for cosine similarity between the query and retrieved documents."}
     )
 
@@ -73,7 +77,7 @@ class RAGConfiguration(LoaderConfiguration):
     )
 
     filter_false: bool = field(
-        default=False,
+        default=True,
         metadata={"description": "Filter out articles with decision 'False' from the retrieved articles."}
     )
 

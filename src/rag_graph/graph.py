@@ -107,7 +107,7 @@ async def retrieve_documents(
     if not config:
         raise ValueError("Configuration required to run <retrieve_documents>.")
     configuration = RAGConfiguration.from_runnable_config(config)
-    vsm = VectorStoreManager(configuration.index_name)
+    vsm = VectorStoreManager(configuration.index_name, configuration)
 
     # Perform searches for all query embeddings and merge results
     query_embeddings = [vsm.embeddings.embed_query(q) for q in state.generated_queries]
@@ -160,7 +160,7 @@ async def get_entries_with_score(
 ) -> dict[str, List[SitemapEntry]]:
     print("Getting entries with score")
     if not state.retrieved_documents or len(state.retrieved_documents) == 0:
-        raise ValueError("No retrieved documents found in state.")
+        return {"analyses": []}
     if not config:
         raise ValueError("Configuration required to run <get_entries_with_score>.")
     configuration = RAGConfiguration.from_runnable_config(config)
@@ -193,7 +193,7 @@ async def analyze_summaries(
     if not config:
         raise ValueError("Configuration required to run <analyze_summaries>.")
     configuration = RAGConfiguration.from_runnable_config(config)
-    vsm = VectorStoreManager(configuration.index_name)
+    vsm = VectorStoreManager(configuration.index_name, configuration)
 
     configuration = RAGConfiguration.from_runnable_config(config)
     sitemap_entries: List[SitemapEntry] = state.sitemap_entries

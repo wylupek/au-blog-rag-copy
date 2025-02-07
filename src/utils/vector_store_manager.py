@@ -4,6 +4,9 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 
 from pinecone import Pinecone, ServerlessSpec
+from langchain_huggingface import HuggingFaceEmbeddings
+
+from src.utils.configuration import LoaderConfiguration, RAGConfiguration
 
 
 class VectorStoreManager:
@@ -19,8 +22,8 @@ class VectorStoreManager:
         return instance
 
 
-    def __init__(self, index_name: str, api_key=os.getenv("PINECONE_API_KEY"),
-                 dimension=1536, cloud='aws', region='us-east-1', metric='cosine'):
+    def __init__(self, index_name: str, configuration: LoaderConfiguration | RAGConfiguration,
+                 api_key=os.getenv("PINECONE_API_KEY"), cloud='aws', region='us-east-1', metric='cosine'):
         """
         Handles vector_store initialization, metadata tracking, and index operations.
         """
@@ -29,8 +32,9 @@ class VectorStoreManager:
             return
 
         self.index_name = index_name
+        self.configuration = configuration
+
         self.api_key = api_key
-        self.dimension = dimension
         self.cloud = cloud
         self.region = region
         self.metric = metric
@@ -39,6 +43,14 @@ class VectorStoreManager:
         self._initialized = True
 
     def _initialize_connections(self):
+        # Initialize embedder
+        if self.configuration.embedding_model == "openai/text-embedding-3-small":
+            self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+            self.dimension = 1536
+        elif self.configuration.embedding_model == "wylupek/au-blog-rag-embedder":
+            self.embeddings = HuggingFaceEmbeddings(model_name="wylupek/au-blog-rag-embedder")
+            self.dimension = 384
+
         # Initialize Pinecone
         self.pinecone_client = Pinecone(api_key=self.api_key)
 
@@ -55,9 +67,6 @@ class VectorStoreManager:
             print(f"Index '{self.index_name}' loaded.")
 
         self.pinecone_index = self.pinecone_client.Index(self.index_name)
-
-        # Setup embedding model
-        self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
         self.vector_store = PineconeVectorStore(index=self.pinecone_index, embedding=self.embeddings)
 
         # Track vector count

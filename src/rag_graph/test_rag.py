@@ -6,9 +6,10 @@ from langchain_core.runnables import RunnableConfig
 async def check_queries():
     config = RunnableConfig(
         configurable={
-            "index_name": "test",
+            "index_name": "au-blog-rag-fine-tuned",
             "filter_false": True,
-            "result_summary_prompt": "A concise summary of the article in plain, non-technical language"
+            "result_summary_prompt": "A concise summary of the article in plain, non-technical language",
+            "embedding_model": "wylupek/au-blog-rag-embedder",
         }
     )
     input_data = RAGState(
