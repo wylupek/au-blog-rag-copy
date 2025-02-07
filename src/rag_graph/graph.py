@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 from dataclasses import dataclass, field
 
 from langchain_core.runnables import RunnableConfig
@@ -89,7 +89,7 @@ async def generate_query_variants(
 
 async def check_query_variants(
     state: RAGState, *, config: Optional[RunnableConfig] = None
-) -> str:
+) -> Literal["retrieve_documents", "generate_query_variants"]:
     if not config:
         raise ValueError("Configuration required to run initialize_vector_store.")
     configuration = RAGConfiguration.from_runnable_config(config)

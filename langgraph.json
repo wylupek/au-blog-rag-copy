@@ -1,0 +1,13 @@
+{
+  "dockerfile_lines": [
+  ],
+  "graphs": {
+    "indexer": "./src/loader_graph/graph.py:graph",
+    "retrieval_graph": "./src/rag_graph/graph.py:graph"
+  },
+  "env": ".env",
+  "python_version": "3.12",
+  "dependencies": [
+    "."
+  ]
+}
