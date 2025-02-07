@@ -1,0 +1,1 @@
+Fine-tuned embedder https://huggingface.co/wylupek/au-blog-rag-embedder
