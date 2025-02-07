@@ -2,7 +2,7 @@
   "dockerfile_lines": [
   ],
   "graphs": {
-    "indexer": "./src/loader_graph/graph.py:graph",
+    "loader_graph": "./src/loader_graph/graph.py:graph",
     "retrieval_graph": "./src/rag_graph/graph.py:graph"
   },
   "env": ".env",
