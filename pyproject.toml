@@ -1,0 +1,25 @@
+[project]
+name = "au-blog-rag"
+version = "0.0.1"
+description = "RAG system for retrieveing and recommending blog posts"
+requires-python = ">=3.9"
+dependencies = [
+    "python-dotenv>=1.0.1",
+    "langchain==0.3.13",
+    "langgraph>=0.2.6",
+    "langchain-pinecone==0.2.0",
+    "langchain-openai==0.2.14",
+    "docling==2.14.0",
+    "scikit-learn==1.6.0",
+]
+
+[project.optional-dependencies]
+fine-tuning = [
+    "llama-index-core",
+    "huggingface_hub",
+    "matplotlib"
+]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
