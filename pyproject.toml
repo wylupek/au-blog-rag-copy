@@ -20,6 +20,10 @@ fine-tuning = [
     "huggingface_hub",
     "matplotlib"
 ]
+frontend = [
+    "streamlit",
+    "requests"
+]
 
 [build-system]
 requires = ["setuptools>=73.0.0", "wheel"]
