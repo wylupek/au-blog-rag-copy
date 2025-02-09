@@ -11,6 +11,11 @@ from src.utils import prompts
 # noinspection PyUnresolvedReferences
 @dataclass(kw_only=True)
 class LoaderConfiguration:
+    index_name: str = field(
+        default="au-blog-rag-fine-tuned",
+        metadata={"description": "Pinecone index name for vectorstore."},
+    )
+
     embedding_model: Annotated[
         str,
         {"__template_metadata__": {"kind": "embeddings"}}
@@ -20,10 +25,6 @@ class LoaderConfiguration:
                                  "Only HuggingFace or OpenAi models available, e.g., 'wylupek/au-blog-rag-embedder' or 'openai/text-embedding-3-small.'"},
     )
 
-    index_name: str = field(
-        default="au-blog-rag-fine-tuned",
-        metadata={"description": "Pinecone index name for vectorstore."},
-    )
 
     @classmethod
     def from_runnable_config(
@@ -66,6 +67,11 @@ class RAGConfiguration(LoaderConfiguration):
         metadata={"description": "The threshold for cosine similarity between the query and retrieved documents."}
     )
 
+    filter_false: bool = field(
+        default=True,
+        metadata={"description": "Filter out articles with decision 'False' from the retrieved articles."}
+    )
+
     analysis_prompt: str = field(
         default=prompts.ANALYSIS_PROMPT,
         metadata={"description": "The system prompt used for analyzing selected article."},
@@ -74,11 +80,6 @@ class RAGConfiguration(LoaderConfiguration):
     analysis_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
         default="gpt-4o",
         metadata={"description": "The OpenAI language model used for analyzing selected articles."},
-    )
-
-    filter_false: bool = field(
-        default=True,
-        metadata={"description": "Filter out articles with decision 'False' from the retrieved articles."}
     )
 
     result_decision_prompt: str = field(
