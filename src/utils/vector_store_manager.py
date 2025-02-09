@@ -1,10 +1,10 @@
 import os
 
 from langchain_openai import OpenAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 
 from pinecone import Pinecone, ServerlessSpec
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.utils.configuration import LoaderConfiguration, RAGConfiguration
 
@@ -44,12 +44,14 @@ class VectorStoreManager:
 
     def _initialize_connections(self):
         # Initialize embedder
-        if self.configuration.embedding_model == "openai/text-embedding-3-small":
-            self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-            self.dimension = 1536
-        elif self.configuration.embedding_model == "wylupek/au-blog-rag-embedder":
-            self.embeddings = HuggingFaceEmbeddings(model_name="wylupek/au-blog-rag-embedder")
-            self.dimension = 384
+        model_provider, model_name = self.configuration.embedding_model.split('/')
+        if model_provider == "openai":
+            self.embeddings = OpenAIEmbeddings(model=model_name)
+            self.dimension = len(self.embeddings.embed_query(""))
+        else:
+            self.embeddings = HuggingFaceEmbeddings(model_name=self.configuration.embedding_model)
+            self.dimension = len(self.embeddings.embed_query(""))
+
 
         # Initialize Pinecone
         self.pinecone_client = Pinecone(api_key=self.api_key)

@@ -16,8 +16,8 @@ class LoaderConfiguration:
         {"__template_metadata__": {"kind": "embeddings"}}
     ] = field(
         default="wylupek/au-blog-rag-embedder",
-        metadata={"description": "Name of the embedding model to use. "
-                                 "Must be a 'wylupek/au-blog-rag-embedder' or 'openai/text-embedding-3-small.'"},
+        metadata={"description": "Name of the embedding model to use. Must be in provider/model_name format. "
+                                 "Only HuggingFace or OpenAi models available, e.g., 'wylupek/au-blog-rag-embedder' or 'openai/text-embedding-3-small.'"},
     )
 
     index_name: str = field(
