@@ -6,7 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langgraph.graph import StateGraph
 
 from src.utils.configuration import LoaderConfiguration
-from src.utils.state import LoaderState, LoaderInputState
+from src.utils.state import LoaderState, LoaderInputState, LoaderOutputState
 from src.loader_graph.docling_loader import DoclingHTMLLoader
 from src.utils.vector_store_manager import VectorStoreManager
 from src.utils.sitemap_entry import Sitemap, SitemapEntry
@@ -132,7 +132,10 @@ async def create_documents(
 
 
 
-builder = StateGraph(LoaderState, input=LoaderInputState, config_schema=LoaderConfiguration)
+builder = StateGraph(LoaderState,
+                     input=LoaderInputState,
+                     output=LoaderOutputState,
+                     config_schema=LoaderConfiguration)
 builder.add_node(extract_sitemap_entries)
 builder.add_node(filter_sitemap_entries)
 builder.add_node(create_documents)
