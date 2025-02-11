@@ -13,17 +13,42 @@ class VectorStoreManager:
     # Cache instances keyed by index_name to avoid reinitializing connections unnecessarily
     _instances = {}
 
-    def __new__(cls, index_name: str, *args, **kwargs):
-        # If an instance already exists for the given index_name, return it.
+    def __new__(cls, index_name: str, *args, skip_connection_check: bool = True, **kwargs):
+        # If skip_connection_check is True, simply return the cached instance (if available)
+        if skip_connection_check:
+            if index_name in cls._instances:
+                return cls._instances[index_name]
+            instance = super().__new__(cls)
+            cls._instances[index_name] = instance
+            return instance
+
+        # Otherwise, perform a connection check to see if the index exists
         if index_name in cls._instances:
-            return cls._instances[index_name]
+            api_key = kwargs.get("api_key", os.getenv("PINECONE_API_KEY"))
+            temp_client = Pinecone(api_key=api_key)
+            existing_indexes = temp_client.list_indexes().names()
+
+            # If the index no longer exists on Pinecone, remove it from the cache.
+            if index_name not in existing_indexes:
+                del cls._instances[index_name]
+            else:
+                return cls._instances[index_name]
+
         instance = super().__new__(cls)
         cls._instances[index_name] = instance
         return instance
 
 
-    def __init__(self, index_name: str, configuration: LoaderConfiguration | RAGConfiguration,
-                 api_key=os.getenv("PINECONE_API_KEY"), cloud='aws', region='us-east-1', metric='cosine'):
+    def __init__(
+            self,
+            index_name: str,
+            configuration: LoaderConfiguration | RAGConfiguration,
+            api_key=os.getenv("PINECONE_API_KEY"),
+            cloud='aws',
+            region='us-east-1',
+            metric='cosine',
+            **kwargs
+    ):
         """
         Handles vector_store initialization, metadata tracking, and index operations.
         """
@@ -53,7 +78,6 @@ class VectorStoreManager:
         else:
             self.embeddings = HuggingFaceEmbeddings(model_name=self.configuration.embedding_model)
             self.dimension = len(self.embeddings.embed_query(""))
-
 
         # Initialize Pinecone
         self.pinecone_client = Pinecone(api_key=self.api_key)

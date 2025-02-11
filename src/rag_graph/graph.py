@@ -107,7 +107,7 @@ async def retrieve_documents(
     if not config:
         raise ValueError("Configuration required to run <retrieve_documents>.")
     configuration = RAGConfiguration.from_runnable_config(config)
-    vsm = VectorStoreManager(configuration.index_name, configuration)
+    vsm = VectorStoreManager(configuration.index_name, configuration, skip_connection_check=False)
 
     # Perform searches for all query embeddings and merge results
     query_embeddings = [vsm.embeddings.embed_query(q) for q in state.generated_queries]
