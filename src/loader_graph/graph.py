@@ -1,5 +1,5 @@
+from typing import Optional, List, Literal
 from datetime import datetime
-from typing import Optional, List
 
 from langchain_core.runnables import RunnableConfig
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -88,7 +88,8 @@ async def create_documents(
 ) -> dict[str, int]:
     if not state.sitemap_entries:
         return {"documents_count": 0}
-    sitemap_entries = state.sitemap_entries
+    print(f"Processing {len(state.sitemap_entries)} sitemap entries.")
+    sitemap_entries = state.sitemap_entries[:10]
 
     if not config:
         raise ValueError("Configuration required to run <create_documents>.")
@@ -128,8 +129,16 @@ async def create_documents(
 
     print(f"Loaded {len(processed_documents)} vectors into database.")
     print(f"Total vector count: {vsm.total_count}")
-    return {"documents_count": len(processed_documents)}
+    return {"documents_count": state.documents_count + len(processed_documents),
+            "sitemap_entries": state.sitemap_entries[10:]}
 
+
+async def check_next_batch(
+    state: LoaderState, *, config: Optional[RunnableConfig] = None
+) -> Literal["create_documents", "__end__"]:
+    if not state.sitemap_entries:
+        return "__end__"
+    return "create_documents"
 
 
 builder = StateGraph(LoaderState,
@@ -139,9 +148,15 @@ builder = StateGraph(LoaderState,
 builder.add_node(extract_sitemap_entries)
 builder.add_node(filter_sitemap_entries)
 builder.add_node(create_documents)
+builder.add_node(check_next_batch)
 
 builder.add_edge("__start__", "extract_sitemap_entries")
 builder.add_edge("extract_sitemap_entries", "filter_sitemap_entries")
 builder.add_edge("filter_sitemap_entries", "create_documents")
+builder.add_conditional_edges(
+    "create_documents",
+    check_next_batch
+)
+
 graph = builder.compile()
 graph.name = "LoaderGraph"

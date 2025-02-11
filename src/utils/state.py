@@ -6,15 +6,14 @@ from langchain_core.documents import Document
 from src.utils.sitemap_entry import SitemapEntry
 
 
+@dataclass(kw_only=True)
+class LoaderInputState:
+    sitemap: str = field(default="https://tech.appunite.com/blog/blog-sitemap.xml")
 
 @dataclass(kw_only=True)
 class LoaderState:
     sitemap_entries: List[SitemapEntry] = field(default_factory=list)
-
-
-@dataclass(kw_only=True)
-class LoaderInputState:
-    sitemap: str = field(default="https://tech.appunite.com/blog/blog-sitemap.xml")
+    documents_count: int = 0
 
 @dataclass(kw_only=True)
 class LoaderOutputState:
@@ -27,6 +26,9 @@ def reduce_generated_queries(
 ) -> List[str]:
     return existing + new
 
+@dataclass(kw_only=True)
+class RAGInputState:
+    query: str
 
 @dataclass(kw_only=True)
 class RAGState(LoaderState):
@@ -37,5 +39,3 @@ class RAGState(LoaderState):
 class RAGOutputState:
     analyses: List[dict] =  field(default_factory=list)
 
-class RAGInputState:
-    query: str
