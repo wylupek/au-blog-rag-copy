@@ -8,7 +8,7 @@ from src.utils.state import LoaderInputState
 async def run_loader():
     config = RunnableConfig(
         configurable={
-            "index_name": "au-blog-rag-fine-tuned",
+            "index_name": "au-blog-rag",
             "embedding_model": "openai/text-embedding-3-small"
         }
     )

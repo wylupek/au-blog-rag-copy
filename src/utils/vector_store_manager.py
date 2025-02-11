@@ -27,8 +27,10 @@ class VectorStoreManager:
         """
         Handles vector_store initialization, metadata tracking, and index operations.
         """
+        print(f"Initializing VectorStoreManager for index '{index_name}'.")
         # Prevent reinitialization if already done
         if hasattr(self, "_initialized") and self._initialized:
+            print(f"VectorStoreManager for index '{index_name}' already initialized.")
             return
 
         self.index_name = index_name
