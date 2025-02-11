@@ -25,6 +25,11 @@ class LoaderConfiguration:
                                  "Only HuggingFace or OpenAi models available, e.g., 'wylupek/au-blog-rag-embedder' or 'openai/text-embedding-3-small.'"},
     )
 
+    load_documents_batch_size: int = field(
+        default=10,
+        metadata={"description": "The number of documents to load in a single batch/node. It should be low to prevent timeouts."},
+    )
+
 
     @classmethod
     def from_runnable_config(
