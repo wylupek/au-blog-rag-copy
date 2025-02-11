@@ -86,10 +86,15 @@ async def filter_sitemap_entries(
 async def create_documents(
     state: LoaderState, *, config: Optional[RunnableConfig] = None
 ) -> dict[str, int]:
+    if not config:
+        raise ValueError("Configuration required to run <filter_sitemap_entries>.")
+    configuration = LoaderConfiguration.from_runnable_config(config)
+    batch_size = configuration.load_documents_batch_size
+
     if not state.sitemap_entries:
         return {"documents_count": 0}
     print(f"Processing {len(state.sitemap_entries)} sitemap entries.")
-    sitemap_entries = state.sitemap_entries[:10]
+    sitemap_entries = state.sitemap_entries[:batch_size]
 
     if not config:
         raise ValueError("Configuration required to run <create_documents>.")
@@ -130,7 +135,7 @@ async def create_documents(
     print(f"Loaded {len(processed_documents)} vectors into database.")
     print(f"Total vector count: {vsm.total_count}")
     return {"documents_count": state.documents_count + len(processed_documents),
-            "sitemap_entries": state.sitemap_entries[10:]}
+            "sitemap_entries": state.sitemap_entries[batch_size:]}
 
 
 async def check_next_batch(
@@ -148,7 +153,6 @@ builder = StateGraph(LoaderState,
 builder.add_node(extract_sitemap_entries)
 builder.add_node(filter_sitemap_entries)
 builder.add_node(create_documents)
-builder.add_node(check_next_batch)
 
 builder.add_edge("__start__", "extract_sitemap_entries")
 builder.add_edge("extract_sitemap_entries", "filter_sitemap_entries")
