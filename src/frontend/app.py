@@ -171,7 +171,7 @@ def main(main_config_keys):
             index=0,
             help = "Select the graph to use for generating responses.",
             label_visibility="collapsed",
-            # disabled=True
+            disabled=True
         )
 
         st.write(f"## Graph Configuration")
