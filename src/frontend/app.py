@@ -14,6 +14,13 @@ load_dotenv()
 api_key = os.getenv("LANGCHAIN_API_KEY")
 api_url = os.getenv("API_URL")
 
+st.markdown("""
+<style>
+	[data-testid="stDecoration"] {
+		display: none;
+	}
+
+</style>""", unsafe_allow_html=True)
 
 
 def generate_config_ui(config_class: Type[LoaderConfiguration]|Type[RAGConfiguration], is_main_ui: bool, main_keys: list) -> dict:
