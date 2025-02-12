@@ -4,6 +4,7 @@ Fine-tuned embedder https://huggingface.co/wylupek/au-blog-rag-embedder
 #### Loader Graph
 * `index_name` - Pinecone vectorstore index name, if it does not exist, it will be created. The index name must match the embedding model dimensions.
 * `embedding_model` - The general embedding model in provider/model_name format used throughout the project. It must be either a HuggingFace or OpenAI model, e.g., 'wylupek/au-blog-rag-embedder', 'openai/text-embedding-3-small'.
+* `load_documents_batch_size` - The number of documents to load into the vector store in a single batch (single node execution).
 
 #### RAG Graph
 * `num_query_variants` - The number of alternative retrieval queries to generate.

@@ -15,6 +15,6 @@ Guidelines:
 
 RESULT_DECISION_PROMPT="A single-word answer (True or False) indicating whether the article is relevant to the user's query and might be used as a showcase for potential client."
 
-RESULT_SUMMARY_PROMPT="A concise summary of the article in plain, non-technical language"
+RESULT_SUMMARY_PROMPT="A concise summary of the article in plain, non-technical language."
 
-RESULT_ANALYSIS_PROMPT="A direct, clear response to the user's question, strictly based on the article content, written in simple terms"
+RESULT_ANALYSIS_PROMPT="A direct, clear response to the user's question, strictly based on the article content, written in simple terms."

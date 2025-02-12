@@ -29,7 +29,7 @@ async def filter_sitemap_entries(
     if not config:
         raise ValueError("Configuration required to run <filter_sitemap_entries>.")
     configuration = LoaderConfiguration.from_runnable_config(config)
-    vsm = VectorStoreManager(configuration.index_name, configuration)
+    vsm = VectorStoreManager(configuration.index_name, configuration, skip_connection_check=False)
 
     k = 1 if vsm.total_count == 0 else vsm.total_count
     dummy_query = ""
