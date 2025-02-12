@@ -74,12 +74,12 @@ class RAGConfiguration(LoaderConfiguration):
 
     threshold: float = field(
         default=0.30,
-        metadata={"description": "The threshold for cosine similarity between the query and retrieved documents."}
+        metadata={"description": "The threshold for cosine similarity between the query and retrieved documents. Lower values will retrieve more documents."}
     )
 
     filter_false: bool = field(
         default=True,
-        metadata={"description": "Filter out articles with decision 'False' from the retrieved articles."}
+        metadata={"description": "Filter out articles with decision 'False' after analysis."}
     )
 
     analysis_prompt: str = field(

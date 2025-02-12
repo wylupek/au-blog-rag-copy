@@ -1,41 +1,37 @@
-import streamlit as st
+from typing import Type
 from dataclasses import fields
 import sys
 import os
 import requests
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from utils.configuration import LoaderConfiguration, RAGConfiguration
-
 from dotenv import load_dotenv
-load_dotenv()
+import streamlit as st
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from src.utils.configuration import LoaderConfiguration, RAGConfiguration
+
+load_dotenv()
 api_key = os.getenv("LANGCHAIN_API_KEY")
 api_url = os.getenv("API_URL")
 
 
-def generate_config_ui(config_class: LoaderConfiguration|RAGConfiguration) -> dict:
+
+def generate_config_ui(config_class: Type[LoaderConfiguration]|Type[RAGConfiguration], is_main_ui: bool, main_keys: list) -> dict:
     """
     Dynamically generates a configuration UI based on the dataclass fields.
     Returns a dictionary with the field names and the user-provided values.
     """
     config_values = {}
-    if config_class.__name__ == "LoaderConfiguration":
-        st.write(f"### Loader Graph Configuration")
-    elif config_class.__name__ == "RAGConfiguration":
-        st.write(f"### RAG Graph Configuration")
-    else:
-        st.write("### Configuration")
-
     for field_obj in fields(config_class):
         name = field_obj.name
+        if (name in main_keys) ^ is_main_ui: # XOR
+            continue
         label = name.replace("_", " ").capitalize()
         default = field_obj.default
         description = field_obj.metadata.get("description", "")
         text_type = field_obj.metadata.get("text_type", None)
         field_type = field_obj.type
 
-        # Handle common types:
         if field_type == "int":
             config_values[name] = st.number_input(
                 label=label,
@@ -70,7 +66,6 @@ def generate_config_ui(config_class: LoaderConfiguration|RAGConfiguration) -> di
                     help=description
                 )
         else:
-            # Fallback for any other type—convert default to string.
             config_values[name] = st.text_input(
                 label=label,
                 value=str(default),
@@ -150,19 +145,38 @@ def format_rag_response(analysis_list):
     return response
 
 
-def main():
+def main(main_config_keys):
     with st.sidebar:
-        st.title('AppUnite Blog RAG')
+        st.title('AppUnite Blog Agent')
+        st.markdown(
+            "This agent is designed to help sales teams during client discussions by quickly retrieving relevant blog articles. It implements two main components: \n"
+            "* **RAG Graph** - Uses a language model to retrieve ranked articles from the database and analyze them. "
+            "Each article response includes a one-word relevance decision, a short summary, and an explanation of how it addresses the client's problem.\n"
+            "* **Loader Graph** - Scrapes articles from a given sitemap, processes them, and updates a Pinecone vector database with the documents. "
+            "It can be used for an already loaded sitemap, for new articles or updates, or for an entirely new sitemap.\n"
+        )
+
+        st.write("## Select Graph")
         graph_option = st.radio(
             "Select Graph",
             options=["RAG Graph", "Loader Graph"],
-            index=0
+            index=0,
+            help = "Select the graph to use for generating responses.",
+            label_visibility="collapsed",
+            # disabled=True
         )
+
+        st.write(f"## Graph Configuration")
+        if graph_option == "Loader Graph":
+            config_data = generate_config_ui(LoaderConfiguration, is_main_ui=True, main_keys=main_config_keys)
+        else:
+            config_data = generate_config_ui(RAGConfiguration, is_main_ui=True, main_keys=main_config_keys)
+
         with st.expander("Optional Configuration", expanded=False):
             if graph_option == "Loader Graph":
-                config_data = generate_config_ui(LoaderConfiguration)
+                config_data.update(generate_config_ui(LoaderConfiguration, is_main_ui=False, main_keys=main_config_keys))
             else:
-                config_data = generate_config_ui(RAGConfiguration)
+                config_data.update(generate_config_ui(RAGConfiguration, is_main_ui=False, main_keys=main_config_keys))
 
     # Create a thread for the session if it doesn't exist.
     if "thread_id" not in st.session_state:
@@ -208,4 +222,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(main_config_keys=["top_k", "threshold", "filter_false"])
