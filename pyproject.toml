@@ -23,7 +23,8 @@ fine-tuning = [
 frontend = [
     "python-dotenv>=1.0.1",
     "streamlit",
-    "requests"
+    "requests",
+    "langchain-core"
 ]
 
 [build-system]
