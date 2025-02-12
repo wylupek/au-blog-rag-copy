@@ -10,7 +10,8 @@ import streamlit as st
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.utils.configuration import LoaderConfiguration, RAGConfiguration
 
-load_dotenv()
+env_path = os.path.join(os.path.dirname(__file__), "../../.env")
+load_dotenv(dotenv_path=env_path)
 api_key = os.getenv("LANGCHAIN_API_KEY")
 api_url = os.getenv("API_URL")
 
